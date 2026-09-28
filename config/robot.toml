@@ -11,7 +11,8 @@ urdf = "data/moz1_boxer.urdf"
 # INIT_DEG from MozBoxer catching/simulation.py (2026-09-28 working tree):
 # legwaist (0, 60, -90, 30, 0, 0), then the two 7-DoF arms.  The FK was
 # cross-checked against the Isaac fixture (0.002 deg rotation; the 10.05 mm
-# position difference is exactly the 2026-09-28 palm-target revision).
+# position difference along +/-X is the outward ready-pose seeding of MozBoxer
+# commit 7231c7d, which the fixture predates).
 legwaist_joint_deg = [0, 60, -90, 30, 0, 0]
 left_arm_joint_deg = [-44.453255, -32.261539, -33.424816, -84.563652, 41.836987, -27.544836, -0.735094]
 right_arm_joint_deg = [44.455063, -32.265514, 33.411938, 84.626892, -36.924816, -27.635696, 0.908170]

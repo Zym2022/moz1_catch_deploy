@@ -192,7 +192,7 @@ UDP/CSV ──Observation──▶ runtime 状态机 ──Commit──▶ estim
 6. **等待位姿、T_base_torso、T_tcp_palm**：由 `robot.toml [robot.posture]`
    的准备姿态关节角（默认即仿真 INIT_DEG）在配置加载时经 URDF FK 自动推导
    ——关节角是唯一事实源，改姿态不存在漏改（敏感性有测试锁定）。推导值与
-   Isaac 夹具交叉验证（旋转 0.002°；位置差 10.05 mm 恰为 9-28 掌目标修订量），
+   Isaac 夹具交叉验证（旋转 0.002°；位置差 10.05 mm 恰为 9-28 源提交 7231c7d 的准备姿态外移量），
    `compute_palm_frames.py --check-base` 随时复核。待办只剩核对控制器控制点
    确为 `left_flange`/`right_flange`；若不同，在 `[robot.mounting_overrides]`
    填实测矩阵覆盖推导值。

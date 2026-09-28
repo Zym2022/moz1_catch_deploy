@@ -8,18 +8,20 @@
 
 | 部署文件 | 源文件 | 源状态 | 改动 |
 | --- | --- | --- | --- |
-| `src/moz1_catch/core/prediction.py` | `MozBoxer/catching/prediction.py` | commit `35c5461` 之后的未提交工作树 | 无（逐字拷贝） |
+| `src/moz1_catch/core/prediction.py` | `MozBoxer/catching/prediction.py` | commit `7231c7d`（2026-09-28 提交） | 无（逐字拷贝，已 diff 核验一致） |
 | `src/moz1_catch/core/one_shot.py` | `MozBoxer/catching/one_shot.py` | 同上 | 两处 import 改为 `moz1_catch.core.*`；`CATCH_BOX_DIMENSIONS_M` → `BOX_DIMENSIONS_M` |
 | `src/moz1_catch/core/geometry.py` | `tasks/direct/mozboxer/motions/dataset_schema.py` 的 `PALM_CENTER_OFFSETS_BODY_M`、`PALM_NORMAL_AXES_BODY`；`tasks/direct/mozboxer/palm_coating.py` 的 `CENTERS_M`、`RADIUS_M`；`catching/box_asset.py` 的尺寸/质量 | 同上 | 抽取为独立常数模块 |
 | `test/test_prediction.py` | `test/test_catching_prediction.py` | 同上 | 仅 import 改写 |
 | `test/test_one_shot.py` | `test_catching_one_shot.py` | 同上 | 仅 import 改写 |
 | `src/moz1_catch/mocap/replay_source.py` 的加载/分段规则 | `scripts/analyze_moz1_box_mocap.py` 的 `load_csv`、`flight_interval`；`scripts/validate_moz1_box_prediction.py` 的 `observations` 降采样与重定心 | 同上 | 移植为类；savolg 参数与规则不变 |
 
-源工作树当时相对 `35c5461` 的未提交修改涉及上述文件（`git status` 中
-`prediction.py`、`one_shot.py` 等为 modified）。**在 MozBoxer 中提交该工作树并
-把此处 sha 回填**是首次实物部署前应完成的收尾：
+源工作树已于 2026-09-28 提交为 `7231c7d`
+（feat(catching): calibrate palm geometry and adapt one-shot catch to mocap）。
+钉定核验：`prediction.py` 与 `data/moz1_boxer.urdf` 逐字一致；`one_shot.py`
+仅上表记录的两行 import 差异；INIT_DEG 姿态与 `robot.toml [robot.posture]`
+默认值一致。
 
-- [ ] MozBoxer 侧提交后，将 commit sha 记录在此：`____________`
+- [x] MozBoxer 源提交已回填：`7231c7d`
 
 ## 数据出处
 
@@ -52,8 +54,9 @@ T_tcp_palm（左右，掌目标系→法兰）与 base_link 系等待位姿。
 | 掌目标偏置 | 本包 `core/geometry.py`（−60 mm 修订） |
 
 交叉验证：FK 与 Isaac 夹具参考值（`catching_box_301_305_510g_20260927` nominal
-run 的起始掌位姿）旋转残差 0.002°，位置残差每手 10.05 mm——方向与大小恰为
-2026-09-28 掌目标点 10 mm 修订（夹具值是修订前记录），互相印证。
+run 的起始掌位姿）旋转残差 0.002°，位置残差每手 10.05 mm、方向沿 ±X——对应
+`7231c7d` 中的准备姿态外移 seeding（夹具值是该项修订前记录；同提交还含掌目标
+点/球阵修订，已含在本包 geometry 常数中）。
 
 T_tcp_palm 语义（2026-09-28 勘误）：规划位姿是"掌目标系"（切平面中心原点 +
 hand-link 轴向），非 hand-link 原点；常量存 ^掌目标系 T_flange = Trans(−偏置) ·

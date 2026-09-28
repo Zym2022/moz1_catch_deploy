@@ -32,8 +32,9 @@ from moz1_catch.kinematics import parse_joints, robot_geometry
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config"
 
 # Isaac fixture reference: start palm poses of the accepted nominal catch run
-# (sim world = base_link aligned), recorded BEFORE the 2026-09-28 palm-target
-# revision - hence the expected 10.05 mm position difference.
+# (sim world = base_link aligned), recorded BEFORE the outward ready-pose
+# seeding of MozBoxer commit 7231c7d - hence the expected ~10 mm position
+# difference along +/-X.
 FIXTURE_WAIT = {
     "left": (np.array((0.19169, -0.62308, 1.1937)),
              np.array((-0.13962998, -0.10416850, -0.67948160, 0.71271113))),

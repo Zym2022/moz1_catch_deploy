@@ -64,7 +64,7 @@ uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具�
    - 准备姿态关节角是唯一事实源（`robot.toml [robot.posture]`，默认即仿真
      INIT_DEG）；等待位姿、T_base_torso、T_tcp_palm 全部在配置加载时由
      URDF 正运动学自动推导，改姿态只改关节角，不存在漏改。推导值与 Isaac
-     夹具交叉验证过（旋转 0.002°，位置差恰为 9-28 掌目标 10 mm 修订），
+     夹具交叉验证过（旋转 0.002°，位置差恰为 9-28 源提交 7231c7d 的准备姿态外移修订），
      `compute_palm_frames.py --check-base` 随时可复核。
    - 上机前确认一件事：控制器控制的点确实是 URDF 的 `left_flange`/
      `right_flange`；若不同，在 `[robot.mounting_overrides]` 填实测矩阵覆盖。

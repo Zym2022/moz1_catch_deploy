@@ -36,9 +36,9 @@ def _geometry(**overrides):
 def test_derived_wait_poses_match_the_isaac_fixture(side):
     """FK at the shipped posture must reproduce the sim reference.
 
-    Rotation within 0.01 deg; position off by exactly the 2026-09-28
-    palm-target revision (~10 mm along the closing normal) because the fixture
-    was recorded before the sphere array moved.
+    Rotation within 0.01 deg; position off by ~10 mm along +/-X because the
+    fixture predates the outward ready-pose seeding of MozBoxer commit 7231c7d
+    (which also carries the palm-target revision these constants include).
     """
     config = load_config(CONFIG_DIR)
     hand = next(item for item in config.robot.hands if item.name == side)
