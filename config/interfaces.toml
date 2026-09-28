@@ -1,0 +1,26 @@
+# External interfaces: mocap UDP stream and the ROS2 cartesian controller.
+# Every field marked TODO must be confirmed against the device/driver before a live run.
+
+[runtime]
+source = "udp"      # "udp" | "replay"
+sink = "ros2"       # "ros2" | "mock"
+
+[mocap_udp]
+bind_host = "0.0.0.0"
+bind_port = 1511             # common mocap default; CONFIRM with the device
+# Packet parser name. "TODO_REPLACE_ME" refuses to start on purpose.
+# Options: "prototype_json" (test format used by scripts/fake_mocap_sender.py)
+# or a name registered for the real vendor format once implemented.
+parser = "TODO_REPLACE_ME"
+rigid_body_id = 5            # Device5 in the CSV exports; CONFIRM for UDP
+
+[ros2]
+# The cartesian controller listens on one topic; publishing pose targets drives it.
+node_name = "moz1_catch_bridge"
+cartesian_topic = "TODO_cartesian_target_topic"
+# ROS message type, "package/MessageType". PLACEHOLDER until the spec is confirmed.
+message_type = "TODO_geometry_msgs/msg/PoseArray"
+# How the two hand targets map into the message: "left_then_right_pose_array" assumes
+# a PoseArray with pose[0]=left, pose[1]=right in torso_flange. Replace when known.
+message_layout = "TODO_left_then_right_pose_array"
+queue_size = 2

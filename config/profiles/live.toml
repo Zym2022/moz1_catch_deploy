@@ -1,0 +1,6 @@
+# Live profile: real UDP mocap + ROS2 cartesian sink. Nothing to override here yet;
+# placeholders in the base files must be filled in first.
+
+[runtime]
+source = "udp"
+sink = "ros2"

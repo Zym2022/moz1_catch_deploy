@@ -1,0 +1,49 @@
+# Frame and clock calibration, versioned as one deployment unit.
+# ^A T_B maps points of frame B into frame A (column vectors, metres, radians).
+#
+# THE PLANNING FRAME IS base_link, unchanged from the simulation; mission
+# geometry and wait poses keep their base_link numbers.  The hardware-facing
+# torso_flange frame enters at exactly two converted boundaries (the fixed
+# legwaist constant T_base_torso lives in robot.toml):
+#   input : T_BG = T_base_torso @ T_FM @ T_MD @ T_DG   (calib.FrameChain)
+#   output: flange targets in torso_flange             (palm_targets_to_tcp)
+#
+#   T_MD  : box rigid body D as reported by mocap (global frame M)
+#   T_FM  : mocap global -> torso_flange  [PLACEHOLDER identity until hand-eye done]
+#   T_DG  : box geometry frame from the rigid body (calibrated 2026-09-27)
+
+[frames]
+version = "placeholder-2026-09-28"
+
+[frames.mocap]
+position_units = "meters"        # "meters" | "millimeters"
+quaternion_order = "xyzw"
+tracking_valid_states = [8]      # CSV TrackingState convention; confirm for the UDP API
+# Device timestamp -> runtime host monotonic clock offset, seconds:
+#     t_host = t_device + offset
+# PLACEHOLDER 0.0; measure with the procedure in docs/deployment_plan.md section 6.3.
+clock_offset_s = 0.0
+
+[frames.extrinsics.T_FM]
+# PLACEHOLDER identity. Replace with the Park hand-eye result.  The calibration
+# robot-side inputs (P_i) must be end-effector poses expressed in torso_flange,
+# matching what the SDK/controller reports; the solver output is then directly
+# T_FM (mocap global -> torso_flange).  The runtime converts onward to base_link
+# with the fixed T_base_torso from robot.toml.  Re-calibrate after moving the
+# chassis or resetting the mocap global frame.
+matrix = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+]
+
+[frames.extrinsics.T_DG]
+# Rigid-body to box-geometry transform, manual calibration of 2026-09-27
+# (MozBoxer catching/docs/mocap_box_geometry_calibration_2026-09-27.md).
+matrix = [
+    [0.0, 0.0, 1.0, -0.0485375],
+    [1.0, 0.0, 0.0, 0.0003],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+]

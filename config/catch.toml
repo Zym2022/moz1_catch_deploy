@@ -1,0 +1,68 @@
+# Catch mission, prediction, planning overrides, arming, safety and execution.
+# All positions are metres in base_link - the planning frame, unchanged from the
+# simulation; the box flies along +Y toward the robot (release at y=-1.5, contact
+# plane near y=-0.58).  The hardware torso_flange frame is converted only at the
+# mocap input and the controller output (see frames.toml / robot.toml).
+
+[mission]
+release_y_m = -1.50          # nominal release height plane; used for sanity checks only
+commit_plane_y_m = -1.05     # commit when a fresh observation reaches this plane
+min_commit_delay_s = 0.05    # earliest commit after detected release
+commit_timeout_s = 0.55      # reject if the commit plane is not reached by then; counts
+                             # from detected motion, and real throws include a ~0.15 s
+                             # in-hand lift before true release, hence 0.55 not 0.40
+release_settle_s = 0.025     # estimator excludes samples this close to release
+
+[prediction]
+window_s = 0.18
+angular_window_s = 0.08
+# Effective free-flight acceleration prior, base_link frame, m/s^2.
+# PLACEHOLDER gravity for live use: replace with the base_link prior after the
+# torso_flange<->mocap extrinsic is calibrated (scripts/check_frames.py prints it
+# from the analysis-frame value via the effective mocap->base rotation).
+acceleration_prior_mps2 = [0.0, 0.0, -9.81]
+regularization_s2 = 0.002
+max_observation_age_s = 0.03
+
+# Optional overrides applied onto LATE_COMMIT_SETTINGS (the paired-trial baseline).
+# Any CatchSettings field name may appear here; unknown names are an error.
+# Filled examples are commented with their baseline values.
+[planning.overrides]
+# plane_y = -0.58             # contact plane (baseline)
+# center_z = 1.20
+# max_palm_speed = 3.0
+# max_palm_acceleration = 48.0
+# close_duration = 0.08
+# retreat_distance = 0.20
+# max_retreat_depth = 0.10
+# max_retreat_center_y = -0.45
+# max_height_error = 0.28
+
+# Waiting-for-throw arming logic; all thresholds on mocap-observed box speed.
+[arming]
+hold_s = 0.50                        # box must be quasi-static this long to arm
+max_speed_mps = 0.15                 # quasi-static threshold while arming
+release_speed_threshold_mps = 0.60   # box faster than this counts as released
+# Release region in base_link; the box must be inside when quasi-static.
+release_region_x_m = [-0.40, 0.40]
+release_region_y_m = [-1.85, -1.20]
+release_region_z_m = [0.50, 2.00]
+
+# Last-resort clamp between the planner and the controller. The planner already
+# respects its own budgets; these catch configuration or calibration mistakes.
+[safety]
+workspace_x_m = [-0.55, 0.55]
+workspace_y_m = [-1.00, 0.10]
+workspace_z_m = [0.40, 1.90]
+max_cartesian_speed_mps = 3.5        # per-hand command speed cap
+watchdog_s = 0.15                    # publication gap that triggers a fault hold
+
+[execution]
+command_period_s = 0.010             # pose target publication period; MEASURE the controller rate
+command_latency_s = 0.005            # plan ready -> controller starts moving; MEASURE on hardware
+settle_margin_s = 0.10               # keep streaming this long beyond stop_time
+reject_duration_s = 0.25             # blend duration on the reject path
+hold_after_finish = true             # keep publishing the final pose until Ctrl+C
+
+[logging]
+output_dir = "output"                # per-attempt subdirectories are created inside

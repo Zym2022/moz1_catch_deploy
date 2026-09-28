@@ -1,0 +1,32 @@
+# Robot-side geometry.  THE READY-POSTURE JOINT ANGLES ARE THE SINGLE SOURCE
+# OF TRUTH: wait poses, the legwaist constant T_base_torso and the palm->flange
+# mounting constants are all derived from them plus data/moz1_boxer.urdf by
+# forward kinematics at config-load time.  Change the posture here and nothing
+# else needs updating.
+
+[robot.posture]
+# URDF for the kinematics; relative to the project root (the config/ parent).
+urdf = "data/moz1_boxer.urdf"
+# Ready-posture joint angles in degrees, URDF joint order.  Defaults are
+# INIT_DEG from MozBoxer catching/simulation.py (2026-09-28 working tree):
+# legwaist (0, 60, -90, 30, 0, 0), then the two 7-DoF arms.  The FK was
+# cross-checked against the Isaac fixture (0.002 deg rotation; the 10.05 mm
+# position difference is exactly the 2026-09-28 palm-target revision).
+legwaist_joint_deg = [0, 60, -90, 30, 0, 0]
+left_arm_joint_deg = [-44.453255, -32.261539, -33.424816, -84.563652, 41.836987, -27.544836, -0.735094]
+right_arm_joint_deg = [44.455063, -32.265514, 33.411938, 84.626892, -36.924816, -27.635696, 0.908170]
+
+# Optional measured overrides for values otherwise derived from the URDF.
+# Leave commented unless the physical hardware differs from the URDF - e.g. the
+# controller TCP turns out NOT to be the URDF left_flange/right_flange, or the
+# hand mounting on the real robot deviates.  Uncomment and fill 4x4 matrices
+# (row-major, metres; T_base_torso: ^base T_torso; T_tcp_palm_*: ^palm T_flange).
+# [robot.mounting_overrides]
+# T_base_torso = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+# T_tcp_palm_left = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+# T_tcp_palm_right = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+
+# Live palm feedback: when the topic below is filled in and readable, the commit-time
+# palm state is measured; otherwise the derived wait pose is used as an approximation.
+[robot.feedback]
+palm_state_topic = ""     # PLACEHOLDER; empty = use derived wait poses

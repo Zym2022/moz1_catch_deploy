@@ -1,0 +1,20 @@
+# Bench profile: prototype_json UDP input + mock sink, no hardware.
+# fake_mocap_sender.py pre-transforms the recentered recording through
+# inv(T_base_torso), so the bench exercises the REAL input chain (identity T_FM
+# placeholder + the real legwaist constant) with no frame overrides at all.
+# Use:
+#   terminal 1: .venv/bin/python scripts/run_catch.py --profile bench
+#   terminal 2: .venv/bin/python scripts/fake_mocap_sender.py --csv data/box_flying_csv/2.csv
+
+[runtime]
+source = "udp"
+sink = "mock"
+
+[mocap_udp]
+bind_host = "127.0.0.1"
+bind_port = 1511
+parser = "prototype_json"
+rigid_body_id = 5
+
+[execution]
+hold_after_finish = false

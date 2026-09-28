@@ -1,0 +1,24 @@
+# Replay profile: CSV replay through the live runtime with a mock command sink.
+# The planning frame stays base_link and the recordings (after x/y recentering)
+# are already base_link-aligned, so no geometry overrides are needed - only the
+# analysis-frame acceleration prior and dry-run conveniences.
+
+[runtime]
+source = "replay"
+sink = "mock"
+
+[prediction]
+# Analysis-frame prior (mocap axes permutation +X=MZ, +Y=MX, +Z=MY), m/s^2.
+# Valid here because the replay chain keeps identity extrinsics.
+acceleration_prior_mps2 = [-0.0533, -0.5501, -8.6888]
+
+[execution]
+command_latency_s = 0.0
+hold_after_finish = false
+
+[replay]
+csv = ""                      # set per run: scripts/dry_run_replay.py --csv ...
+downsample_hz = 120.0         # 0 = native rate
+recenter_to_release = true
+# Playback is always paced in real time: the planner's latency compensation
+# assumes the observation clock advances at wall rate.
