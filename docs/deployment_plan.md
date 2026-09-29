@@ -181,12 +181,14 @@ UDP/CSV ──Observation──▶ runtime 状态机 ──Commit──▶ estim
 2. **箱体刚体 T_DG**：已标定（2026-09-27），已写入默认配置；重建刚体后重核。
 3. **时钟偏置**：挥臂相关法测动捕设备钟 → 宿主钟偏置，写入 `frames.toml`；
    运行期漂移以 `max_observation_age_s`（30 ms）兜底拒旧帧。
-4. **加速度先验换系**：T_FM 定好后运行 `scripts/check_frames.py`，其打印的
-   base_link 先验（经等效外参 T_base_torso @ T_FM 换算）覆盖
-   `catch.toml [prediction]`。分析系先验与实物先验是同一物理量在不同坐标系的
-   分量，换算已内置，不要手抄分析系数值。
-   `check_frames.py --chain-check` 的抛物线不变性测试（含非平凡 T_base_torso）
-   专门防旋转方向/符号错误。
+4. **加速度先验换系与竖直修正**：T_FM 定好后运行 `scripts/check_frames.py`，
+   其打印的 base_link 先验（经等效外参 T_base_torso @ T_FM 换算）覆盖
+   `catch.toml [prediction]`，并把 `vertical_forecast_gain_per_m` 设为标定值
+   0.0682745（2026-09-29 三十六条记录研究的经验竖直修正
+   `a_z -= k·v_z·|v|`；沿竖直轴作用，base_link +Z 即竖直，可直接沿用）。
+   分析系先验与实物先验是同一物理量在不同坐标系的分量，换算已内置，
+   不要手抄分析系数值。`check_frames.py --chain-check` 的抛物线不变性测试
+   （含非平凡 T_base_torso）专门防旋转方向/符号错误。
 5. **静止箱端到端核对**：箱摆已知位置，`check_frames.py --box-pose ...` 输出
    base_link 下箱心与八角点，与卷尺/机器人示教位姿比对（建议 ≤10 mm）。
 6. **等待位姿、T_base_torso、T_tcp_palm**：由 `robot.toml [robot.posture]`

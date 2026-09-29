@@ -56,7 +56,9 @@ uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具�
    - `check_frames.py` 打印的 base_link 系先验（经等效外参
      T_base_torso @ T_FM 换算）覆盖 `catch.toml [prediction]`
      （分析系先验与实物先验是同一物理量在不同坐标系的分量表达，换算公式
-     已内置，不要手抄分析系数值）；
+     已内置，不要手抄分析系数值）；同时把竖直修正增益
+     `vertical_forecast_gain_per_m` 设为标定值 0.0682745（2026-09-29 研究，
+     沿竖直轴作用，base_link +Z 即竖直，直接沿用；置 0 停用）；
    - 实测"规划完成 → 手臂实际起动"的端到端延迟填 `command_latency_s`；
    - 用动捕末端刚体记录一次空载接箱轨迹的跟踪滞后 τ；若稳定，在指令流里
      前移时间轴 `t + τ` 补偿（当前默认 0）。

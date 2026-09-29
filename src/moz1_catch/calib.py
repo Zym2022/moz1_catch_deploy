@@ -35,9 +35,15 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-# Analysis frame used by the 2026-09-28 mocap study: +X=MZ, +Y=MX, +Z=MY.
+# Analysis frame used by the mocap studies: +X=MZ, +Y=MX, +Z=MY.
 ANALYSIS_BASIS_M = np.array(((0., 0., 1.), (1., 0., 0.), (0., 1., 0.)))
-ANALYSIS_PRIOR_MPS2 = np.array((-0.0533, -0.5501, -8.6888))
+# Calibrated on all 34 evaluable throws of the 36-record study (2026-09-29,
+# MozBoxer commit f603888); see that repo's calibration.json.
+ANALYSIS_PRIOR_MPS2 = np.array((-0.011349310646618586, -0.3868940737031952, -8.791483013796956))
+# Empirical vertical forecast gain k in a_forecast_z = a_fit_z - k*v_z*|v|
+# (same calibration).  Carries over to any planning frame whose +Z is the
+# same vertical direction; 0 disables the correction.
+ANALYSIS_VERTICAL_GAIN_PER_M = 0.06827448239423729
 
 
 def as_transform(rotation: np.ndarray, translation: np.ndarray) -> np.ndarray:

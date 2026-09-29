@@ -8,9 +8,11 @@ source = "replay"
 sink = "mock"
 
 [prediction]
-# Analysis-frame prior (mocap axes permutation +X=MZ, +Y=MX, +Z=MY), m/s^2.
-# Valid here because the replay chain keeps identity extrinsics.
-acceleration_prior_mps2 = [-0.0533, -0.5501, -8.6888]
+# Calibrated on the 36-record study (2026-09-29, MozBoxer f603888): analysis-frame
+# prior plus the empirical vertical forecast gain.  Valid here because the replay
+# chain keeps identity extrinsics and the analysis frame's +Z is vertical.
+acceleration_prior_mps2 = [-0.011349310646618586, -0.3868940737031952, -8.791483013796956]
+vertical_forecast_gain_per_m = 0.06827448239423729
 
 [execution]
 command_latency_s = 0.0

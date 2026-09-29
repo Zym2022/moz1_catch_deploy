@@ -34,6 +34,15 @@ def test_time_window_uses_more_than_nine_poses_and_rejects_future_or_stale_data(
         np.testing.assert_allclose(estimate.acceleration_mps2, acceleration, atol=1e-10)
         np.testing.assert_allclose(estimate.angular_velocity_radps, flight.angular_velocity_radps, atol=1e-12)
         assert (estimate.rotation*expected.rotation.inv()).magnitude() < 1e-12
+        corrected = estimate_box_flight(times, poses, now,
+            replace(settings, vertical_forecast_gain_per_m=.08))
+        expected_z = acceleration[2] - .08*expected.velocity_mps[2]*np.linalg.norm(expected.velocity_mps)
+        assert corrected.acceleration_mps2[2] == pytest.approx(expected_z, abs=1e-10)
+        np.testing.assert_allclose(corrected.acceleration_mps2[:2], acceleration[:2], atol=1e-10)
+        early = int(.1*rate)
+        ascending = estimate_box_flight(times[:early+1], poses[:early+1], times[early]+.002,
+            replace(settings, vertical_forecast_gain_per_m=.08))
+        assert ascending.velocity_mps[2] > 0 and ascending.acceleration_mps2[2] < acceleration[2]
         ancient = poses.copy(); ancient[times < now-settings.window_s, :3] += 1.
         np.testing.assert_allclose(estimate_box_flight(times, ancient, now, settings).position_m,
                                    expected.position_m, atol=1e-12)

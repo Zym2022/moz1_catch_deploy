@@ -226,6 +226,7 @@ def load_config(config_dir: Path, profile: str | None = None) -> Config:
             float(prediction_table["angular_window_s"]),
             tuple(prior),
             float(prediction_table["regularization_s2"]),
+            float(prediction_table.get("vertical_forecast_gain_per_m", 0.)),
         ),
         max_observation_age_s=float(prediction_table["max_observation_age_s"]),
     )

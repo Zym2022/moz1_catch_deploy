@@ -8,16 +8,18 @@ from scipy.spatial.transform import Rotation
 
 @dataclass(frozen=True)
 class PredictionSettings:
-    window_s: float = .18
-    angular_window_s: float = .08
+    window_s: float = .20
+    angular_window_s: float = .16
     acceleration_prior_mps2: tuple[float, float, float] = (0., 0., -9.81)
     # Mean squared position residual + this squared weight * acceleration residual.
     acceleration_regularization_s2: float = .002
+    vertical_forecast_gain_per_m: float = 0.
 
     def __post_init__(self):
-        values = (self.window_s, self.angular_window_s, self.acceleration_regularization_s2)
+        values = (self.window_s, self.angular_window_s, self.acceleration_regularization_s2,
+                  self.vertical_forecast_gain_per_m)
         prior = np.asarray(self.acceleration_prior_mps2, dtype=float)
-        if (not np.isfinite(values).all() or min(values[:2]) < .02 or values[2] < 0
+        if (not np.isfinite(values).all() or min(values[:2]) < .02 or min(values[2:]) < 0
                 or prior.shape != (3,) or not np.isfinite(prior).all()):
             raise ValueError("invalid flight prediction settings")
 
@@ -96,6 +98,8 @@ def estimate_box_flight(times_s, poses_xyzw, now_s: float,
     design = np.vstack((design, (0., 0., penalty)))
     targets = np.vstack((p/np.sqrt(len(t)), penalty*np.asarray(settings.acceleration_prior_mps2)))
     position, velocity, acceleration = np.linalg.lstsq(design, targets, rcond=None)[0]
+    # Empirical contact-horizon correction; this is not an integrated drag model.
+    acceleration[2] -= settings.vertical_forecast_gain_per_m * velocity[2] * np.linalg.norm(velocity)
 
     angular = times >= now_s-settings.angular_window_s-1e-10
     angular_t = times[angular]

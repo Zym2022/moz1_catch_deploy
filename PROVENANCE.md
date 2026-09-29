@@ -8,20 +8,21 @@
 
 | 部署文件 | 源文件 | 源状态 | 改动 |
 | --- | --- | --- | --- |
-| `src/moz1_catch/core/prediction.py` | `MozBoxer/catching/prediction.py` | commit `7231c7d`（2026-09-28 提交） | 无（逐字拷贝，已 diff 核验一致） |
+| `src/moz1_catch/core/prediction.py` | `MozBoxer/catching/prediction.py` | commit `f603888`（2026-09-29 提交；含 200/160 ms 窗口与竖直经验修正） | 无（逐字拷贝，已 diff 核验一致） |
 | `src/moz1_catch/core/one_shot.py` | `MozBoxer/catching/one_shot.py` | 同上 | 两处 import 改为 `moz1_catch.core.*`；`CATCH_BOX_DIMENSIONS_M` → `BOX_DIMENSIONS_M` |
 | `src/moz1_catch/core/geometry.py` | `tasks/direct/mozboxer/motions/dataset_schema.py` 的 `PALM_CENTER_OFFSETS_BODY_M`、`PALM_NORMAL_AXES_BODY`；`tasks/direct/mozboxer/palm_coating.py` 的 `CENTERS_M`、`RADIUS_M`；`catching/box_asset.py` 的尺寸/质量 | 同上 | 抽取为独立常数模块 |
 | `test/test_prediction.py` | `test/test_catching_prediction.py` | 同上 | 仅 import 改写 |
 | `test/test_one_shot.py` | `test_catching_one_shot.py` | 同上 | 仅 import 改写 |
 | `src/moz1_catch/mocap/replay_source.py` 的加载/分段规则 | `scripts/analyze_moz1_box_mocap.py` 的 `load_csv`、`flight_interval`；`scripts/validate_moz1_box_prediction.py` 的 `observations` 降采样与重定心 | 同上 | 移植为类；savolg 参数与规则不变 |
 
-源工作树已于 2026-09-28 提交为 `7231c7d`
-（feat(catching): calibrate palm geometry and adapt one-shot catch to mocap）。
-钉定核验：`prediction.py` 与 `data/moz1_boxer.urdf` 逐字一致；`one_shot.py`
-仅上表记录的两行 import 差异；INIT_DEG 姿态与 `robot.toml [robot.posture]`
-默认值一致。
+- `7231c7d`（2026-09-28，掌几何标定与动捕适配）：URDF 逐字一致、`one_shot.py`
+  仅两行 import 差异、INIT_DEG 与 `[robot.posture]` 一致。
+- `f603888`（2026-09-29，36 条记录与预测精化）：`prediction.py` 已同步为该提交
+  逐字版本（窗口 200/160 ms + `vertical_forecast_gain_per_m`）；`one_shot.py` 在该
+  提交中未变。36 条 CSV 全量同步至 `data/box_flying_csv/`；分析系先验与 k 更新为
+  34 条重标定值（见 `mocap_prediction_vertical_refinement_2026-09-29.md`）。
 
-- [x] MozBoxer 源提交已回填：`7231c7d`
+- [x] MozBoxer 源提交已回填：`7231c7d`、`f603888`（最新同步点）
 
 ## 数据出处
 
@@ -33,10 +34,11 @@
 
 - `T_DG`：2026-09-27 手工标定（文档
   `catching/docs/mocap_box_geometry_calibration_2026-09-27.md`）。
-- 分析系加速度先验 `(-0.0533, -0.5501, -8.6888) m/s²`：2026-09-28 五条记录中位数
-  （文档 `one_shot_mocap_prediction_results_2026-09-28.md`）。部署时经
-  `rotate_prior`（用等效外参 T_base_torso @ T_FM）换算到 base_link 系，是同一
-  物理量换系后的分量。
+- 分析系加速度先验 `(-0.011349, -0.386894, -8.791483) m/s²` 与竖直修正增益
+  `k=0.0682745 m⁻¹`：36 条记录研究、34 条可评价记录重标定（文档
+  `mocap_prediction_vertical_refinement_2026-09-29.md`，2026-09-29）。部署时先验经
+  `rotate_prior`（用等效外参 T_base_torso @ T_FM）换算到 base_link 系；k 沿竖直
+  轴作用，在 base_link（+Z 竖直）可直接沿用。
 - `LATE_COMMIT_SETTINGS`：配对鲁棒性实验选定（文档
   `one_shot_normal_priority_results_2026-09-26.md` 与后续提交）。
 

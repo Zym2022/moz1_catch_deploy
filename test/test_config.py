@@ -33,7 +33,9 @@ def test_replay_profile_loads_with_analysis_prior():
     config = load_config(CONFIG_DIR, "replay")
     assert config.source_kind == "replay" and config.sink_kind == "mock"
     np.testing.assert_allclose(config.prediction.settings.acceleration_prior_mps2,
-                               (-0.0533, -0.5501, -8.6888), atol=1e-9)
+                               (-0.011349310646618586, -0.3868940737031952, -8.791483013796956),
+                               atol=1e-12)
+    assert config.prediction.settings.vertical_forecast_gain_per_m == pytest.approx(0.06827448239423729)
     assert config.catch_settings.plane_y == -0.58  # LATE_COMMIT baseline, base_link
     assert config.frames.T_DG[0, 3] == pytest.approx(-0.0485375)
 

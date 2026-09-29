@@ -141,8 +141,11 @@ def test_box_that_never_crosses_is_rejected_for_timeout(tmp_path):
 
 
 def test_recorded_throws_replay_with_pinned_decisions(tmp_path):
+    # The five originally pinned records keep the regression fast (real-time
+    # pacing); any of the other 31 can be replayed manually via
+    # scripts/dry_run_replay.py.
     decisions = {}
-    for csv in sorted((ROOT / "data/box_flying_csv").glob("*.csv")):
+    for csv in sorted((ROOT / "data/box_flying_csv").glob("[1-5].csv")):
         config = replay_config(csv, downsample_hz=120.)
         config = replace(config, logging=replace(config.logging, output_dir=tmp_path))
         source = ReplayMocapSource(config.replay)

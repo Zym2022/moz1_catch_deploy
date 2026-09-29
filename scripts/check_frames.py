@@ -3,8 +3,8 @@
 
 Checks performed:
   - T_FM / T_DG / T_base_torso are valid SE(3) transforms (orthogonal, det +1).
-  - Prints the effective mocap->base_link extrinsic (T_base_torso @ T_FM) and
-    the acceleration prior implied by it, ready to paste into catch.toml.
+  - Prints the effective mocap->base_link extrinsic (T_base_torso @ T_FM), the
+    acceleration prior implied by it, and the vertical forecast gain reminder.
   - With --box-pose "x y z qx qy qz qw" (device units): prints the box geometry
     pose in base_link after the full chain, for comparison against a tape
     measure / a taught robot touching a stationary box.
@@ -23,7 +23,8 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from moz1_catch.calib import (
-    ANALYSIS_PRIOR_MPS2, FrameChain, effective_extrinsic, rotate_prior,
+    ANALYSIS_PRIOR_MPS2, ANALYSIS_VERTICAL_GAIN_PER_M, FrameChain,
+    effective_extrinsic, rotate_prior,
 )
 from moz1_catch.config import load_config
 from moz1_catch.core.prediction import BoxFlight, PredictionSettings, estimate_box_flight
@@ -101,6 +102,9 @@ def main(argv=None) -> int:
     print(f"base_link prior via effective T_MB: {prior.round(5).tolist()}  <- paste into catch.toml [prediction]")
     print(f"configured prior: {configured.round(5).tolist()}"
           + ("" if np.allclose(configured, prior, atol=1e-3) else "  (DIFFERS from rotated prior)"))
+    print(f"vertical forecast gain k carries over as-is when planning +Z is vertical "
+          f"(calibrated: {ANALYSIS_VERTICAL_GAIN_PER_M:.7f}); currently configured: "
+          f"{config.prediction.settings.vertical_forecast_gain_per_m:.7f}")
 
     if args.chain_check:
         chain_check(config)
