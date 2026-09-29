@@ -7,11 +7,11 @@ can be tested without the mocap system.
 
 The recording is recentred like the replay source (release lands at
 (0, -1.5, z) in the base_link convention), then pushed through the INVERSE of
-the runtime's input chain (identity T_FM plus the real legwaist constant
-T_base_torso from config) so that what the runtime receives converts back to
-exactly the base_link trajectory.  The bench therefore exercises the real
-conversion chain, not a neutralized one.  Playback is paced in real time and
-stamped with this host's perf_counter clock.
+the runtime's input chain (the calibrated T_FM hand-eye plus the real legwaist
+constant T_base_torso from config, i.e. inv(T_base_torso @ T_FM)) so that what
+the runtime receives converts back to exactly the base_link trajectory.  The
+bench therefore exercises the real conversion chain, not a neutralized one.
+Playback is paced in real time and stamped with this host's perf_counter clock.
 
     terminal 1: .venv/bin/python scripts/run_catch.py --profile bench
     terminal 2: .venv/bin/python scripts/fake_mocap_sender.py --csv data/box_flying_csv/2.csv
@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from moz1_catch.calib import as_transform, transform_inverse
+from moz1_catch.calib import as_transform, effective_extrinsic, transform_inverse
 from moz1_catch.config import load_config
 from moz1_catch.mocap.replay_source import _release_index, load_recording
 
@@ -52,8 +52,10 @@ def main(argv=None) -> int:
     start = _release_index(recording)
     shift = np.array((recording["center"][start, 0], recording["center"][start, 1] + 1.5, 0.))
     # Desired base_link box poses; the runtime's chain must invert the following.
-    T_base_torso = load_config(args.config_dir).robot.T_base_torso
-    to_device = transform_inverse(T_base_torso)
+    config = load_config(args.config_dir)
+    # Full mocap->base_link input chain: calibrated T_FM + legwaist constant.
+    to_device = transform_inverse(
+        effective_extrinsic(config.frames.T_FM, config.robot.T_base_torso))
 
     sent = 0
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -68,7 +70,7 @@ def main(argv=None) -> int:
                 time.sleep(due - now)
             T_BG = as_transform(recording["rotation"][index],
                                 recording["center"][index] - shift)
-            # T_MD = inv(T_base_torso) @ T_BG @ T_GD, with T_GD = as_transform(R_GD, C_GD).
+            # T_MD = inv(T_base_torso @ T_FM) @ T_BG @ T_GD, with T_GD = as_transform(R_GD, C_GD).
             T_MD = to_device @ T_BG @ as_transform(R_GD, C_GD)
             quaternion = Rotation.from_matrix(T_MD[:3, :3]).as_quat()
             packet = dict(t=time.perf_counter(), id=args.rigid_body_id,
@@ -79,7 +81,7 @@ def main(argv=None) -> int:
             sock.sendto(json.dumps(packet).encode("ascii"), (args.host, args.port))
             sent += 1
     print(f"sent {sent} packets from {args.csv.name} "
-          f"(base_link-recentered, pre-transformed through inv(T_base_torso), host-stamped)")
+          f"(base_link-recentered, pre-transformed through inv(T_base_torso @ T_FM), host-stamped)")
     return 0
 
 

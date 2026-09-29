@@ -140,6 +140,40 @@ def test_box_that_never_crosses_is_rejected_for_timeout(tmp_path):
     assert "commit" in result.reason
 
 
+def test_carried_in_box_rearms_and_the_throw_is_caught(tmp_path):
+    """A box carried into the region at walking speed must not waste the attempt.
+
+    The pre-arming shortcut fires a candidate release when the carried box
+    enters the region; when the operator stops, the runtime falls back to
+    ARMED, the quasi-static hold completes, and the actual throw is caught.
+    Without the fallback this scenario dies on the commit timeout instead.
+    """
+    config = replay_config(ROOT / "data/box_flying_csv/1.csv")
+    config = replace(config, logging=replace(config.logging, output_dir=tmp_path))
+    rate = 120.
+    samples = []
+    t = 0.
+    y = -2.10                                   # outside the region (y < -1.85)
+    while y < -1.50:                            # walk in at 0.9 m/s along +Y
+        samples.append((t, np.array((0.0, y, 1.2)), (0., 0., 0., 1.), True))
+        t += 1. / rate
+        y += 0.9 / rate
+    for _ in range(int(0.8 * rate)):            # stand and hold the box
+        samples.append((t, np.array((0.0, -1.50, 1.2)), (0., 0., 0., 1.), True))
+        t += 1. / rate
+    flight = BoxFlight(np.array((0.0, -1.50, 1.2)), np.array((0.05, 1.7, 2.4525)),
+                       Rotation.from_euler("xyz", (3, -2, 4), degrees=True),
+                       np.array((0.02, -0.05, 0.1)), np.array((0., 0., -9.81)))
+    for moment in np.arange(1e-3, 0.75, 1. / rate):
+        samples.append((t, flight.positions(float(moment)),
+                        flight.rotations(float(moment)).as_quat(), True))
+        t += 1. / rate
+    runtime, sink, _ = make_runtime(config, SyntheticSource(samples))
+    result = runtime.run(max_wait_s=8.)
+    assert result.decision == "accept", result.reason
+    assert sink.count > 10
+
+
 def test_recorded_throws_replay_with_pinned_decisions(tmp_path):
     # The five originally pinned records keep the regression fast (real-time
     # pacing); any of the other 31 can be replayed manually via

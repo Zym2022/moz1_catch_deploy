@@ -2,8 +2,11 @@
 
     WAIT    no usable box tracking
     ARMED   box quasi-static inside the release region; operator may throw
-    FLIGHT  release detected; rolling observations and previews, committing on
-            the first fresh observation that crosses the commit plane
+    FLIGHT  release detected (fast from ARMED toward the robot, or the
+            pre-arming shortcut for an already-flying box); rolling
+            observations and previews, committing on the first fresh
+            observation that crosses the commit plane; a box that comes to
+            rest falls back to ARMED (carried in, not thrown)
     EXECUTING  plan frozen; streaming plan.target(t) until stop + margin
     REJECTED   hold/blend back to the wait pose
     DONE       hold the final pose (post-catch)
@@ -69,12 +72,12 @@ class CatchRuntime:
 
     # -- observation handling -------------------------------------------------
 
-    def _speed(self, observation) -> float:
+    def _velocity(self, observation) -> np.ndarray | None:
+        """Frame-to-frame box velocity in base_link, m/s (None when unusable)."""
         if self._last_position is None or observation.t_s <= self._last_t:
-            return float("inf")
-        return float(np.linalg.norm(observation.position_m - self._last_position)
-                     / (observation.t_s - self._last_t))
-
+            return None
+        return ((observation.position_m - self._last_position)
+                / (observation.t_s - self._last_t))
     def _inside_release_region(self, position) -> bool:
         region = self._config.arming.release_region
         return bool(np.all(position >= region[:, 0]) and np.all(position <= region[:, 1]))
@@ -84,8 +87,10 @@ class CatchRuntime:
         arming = self._config.arming
         mission = self._config.mission
         if observation.valid:
-            speed = self._speed(observation)
+            velocity = self._velocity(observation)      # uses the PREVIOUS sample
+            speed = float("inf") if velocity is None else float(np.linalg.norm(velocity))
         else:
+            velocity = None
             speed = float("nan")
         self._last_position = observation.position_m if observation.valid else None
         self._last_t = observation.t_s
@@ -102,8 +107,11 @@ class CatchRuntime:
                                   " - operator may throw")
                         return ARMED, False
                 elif speed >= arming.release_speed_threshold_mps:
-                    # The box is already flying inside the release region (short or
-                    # absent quasi-static hold): treat this observation as the release.
+                    # The box is already flying inside the release region (a
+                    # throw-only clip, or a carried box entering the area).
+                    # Taken as a CANDIDATE release: FLIGHT falls back to ARMED
+                    # if the box comes to rest, so carrying never wastes the
+                    # attempt on the commit timeout.
                     self._release_t = observation.t_s
                     self._flight_t = []
                     self._flight_poses = []
@@ -116,7 +124,10 @@ class CatchRuntime:
                 self._arm_since = None
                 self._trace.event("tracking lost while armed; back to WAIT")
                 return WAIT, False
-            if speed >= arming.release_speed_threshold_mps:
+            if (speed >= arming.release_speed_threshold_mps
+                    and velocity is not None and velocity[1] > 0.):
+                # Fast AND toward the robot (+Y, the flight direction): a throw.
+                # Wind-ups and fumbles that move the box away do not count.
                 self._release_t = observation.t_s
                 self._flight_t = []
                 self._flight_poses = []
@@ -132,6 +143,16 @@ class CatchRuntime:
                 return REJECTED, self._reject("commit timeout: box did not reach the commit plane")
             if not observation.valid:
                 return FLIGHT, False
+            if speed <= arming.max_speed_mps:
+                # The "release" was a carried box coming to rest inside the
+                # region (the pre-arming shortcut fired on entry).  Resume the
+                # normal arming flow instead of waiting out the commit timeout.
+                # A real throw cannot slow below the quasi-static threshold in
+                # flight: the mission geometry needs ~1.3 m/s of horizontal
+                # speed to reach the contact plane, well above 0.15.
+                self._arm_since = observation.t_s
+                self._trace.event("candidate flight came to rest; falling back to ARMED")
+                return ARMED, False
             self._flight_t.append(observation.t_s)
             self._flight_poses.append(np.r_[observation.position_m, observation.quat_xyzw])
             if observation.t_s - self._release_t >= mission.release_settle_s:

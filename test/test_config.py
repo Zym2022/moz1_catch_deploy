@@ -47,8 +47,18 @@ def test_base_config_is_live_udp_ros2_base_link_planning():
     assert config.mission.commit_plane_y_m == -1.05
     assert config.catch_settings.plane_y == -0.58
     assert config.catch_settings.center_z == 1.20
-    assert config.udp.parser == "TODO_REPLACE_ME"
-    assert np.allclose(config.frames.T_FM, np.eye(4))       # hand-eye placeholder
+    assert config.udp.parser == "opti_json"                   # real vendor stream
+    assert config.udp.bind_port == 65501 and config.udp.rigid_body_id == 0
+    assert config.ros2.cartesian_topic == "mx_mix_command"    # confirmed interface
+    assert config.ros2.ros_domain_id == 33
+    # Calibrated T_FM (mocap global -> torso_flange), hand-eye 2026-09-28.
+    # The source JSON names it T_waist03_mocap, but waist03_cartesian IS
+    # torso_flange - pin the deployed values so recalibration updates both.
+    np.testing.assert_allclose(config.frames.T_FM, (
+        (0.1312114881965254, -0.011309562447936794, 0.9912898865430282, -0.7810500166547029),
+        (0.9910219351252707, -0.024398167582064083, -0.13145437809065702, -0.3016068161257964),
+        (0.025672348272353103, 0.9996383462112052, 0.0080067045848638, -1.3089104094800397),
+        (0.0, 0.0, 0.0, 1.0)))
     assert np.allclose(config.robot.T_base_torso[:3, :3], np.eye(3))  # FK constant
     assert config.robot.T_base_torso[2, 3] == pytest.approx(1.202396)
 

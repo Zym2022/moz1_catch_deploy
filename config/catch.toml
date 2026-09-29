@@ -17,16 +17,16 @@ release_settle_s = 0.025     # estimator excludes samples this close to release
 window_s = 0.20                 # 36-record baseline (2026-09-29): 200 ms position fit
 angular_window_s = 0.16         # 160 ms attitude fit
 # Effective free-flight acceleration prior, base_link frame, m/s^2.
-# PLACEHOLDER gravity for live use: replace with the base_link prior after the
-# torso_flange<->mocap extrinsic is calibrated (scripts/check_frames.py prints it
-# from the analysis-frame value via the effective mocap->base rotation).
-acceleration_prior_mps2 = [0.0, 0.0, -9.81]
+# Analysis-frame prior rotated through the effective mocap->base extrinsic
+# (T_base_torso @ T_FM, T_FM hand-eye calibrated 2026-09-28); produced by
+# scripts/check_frames.py from the 36-record study value - never hand-copied.
+acceleration_prior_mps2 = [0.03741242210627171, -0.16743252117154325, -8.798326890638098]
 # Empirical vertical forecast correction a_z -= k * v_z * |v| (2026-09-29 study).
 # Calibrated value 0.0682745 (together with the calibrated prior, in the
 # analysis frame).  Valid in base_link as-is because +Z is the same vertical;
-# enable by setting the value after the prior above is rotated in, or 0 to
-# disable (the ideal-simulation default).
-vertical_forecast_gain_per_m = 0.0
+# enabled now that the prior above is the rotated-in calibrated one
+# (0 disables the correction).
+vertical_forecast_gain_per_m = 0.0682745
 regularization_s2 = 0.002
 max_observation_age_s = 0.03
 
@@ -45,10 +45,16 @@ max_observation_age_s = 0.03
 # max_height_error = 0.28
 
 # Waiting-for-throw arming logic; all thresholds on mocap-observed box speed.
+# Operational flow this encodes: the operator carries the box into the throw
+# area at any speed - the pre-arming shortcut may fire a CANDIDATE release,
+# but as soon as the carried box comes to rest the runtime falls back to ARMED,
+# so carrying never wastes the attempt.  From ARMED, release requires the speed
+# threshold AND motion toward the robot (+Y), so wind-ups and fumbles away
+# from the robot do not count as a throw.
 [arming]
 hold_s = 0.50                        # box must be quasi-static this long to arm
 max_speed_mps = 0.15                 # quasi-static threshold while arming
-release_speed_threshold_mps = 0.60   # box faster than this counts as released
+release_speed_threshold_mps = 0.60   # fast (+Y from ARMED) counts as released
 # Release region in base_link; the box must be inside when quasi-static.
 release_region_x_m = [-0.40, 0.40]
 release_region_y_m = [-1.85, -1.20]

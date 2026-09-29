@@ -6,21 +6,29 @@ source = "udp"      # "udp" | "replay"
 sink = "ros2"       # "ros2" | "mock"
 
 [mocap_udp]
+# Real stream, measured on the robot host 2026-09-29: the mocap host
+# 192.168.12.3 continuously sends to this port - one rigid-body frame plus one
+# marker frame per tick at 200 Hz (see _parse_opti_json for the packet shape).
 bind_host = "0.0.0.0"
-bind_port = 1511             # common mocap default; CONFIRM with the device
-# Packet parser name. "TODO_REPLACE_ME" refuses to start on purpose.
-# Options: "prototype_json" (test format used by scripts/fake_mocap_sender.py)
-# or a name registered for the real vendor format once implemented.
-parser = "TODO_REPLACE_ME"
-rigid_body_id = 5            # Device5 in the CSV exports; CONFIRM for UDP
+bind_port = 65501
+# "opti_json" parses the real vendor stream; "prototype_json" is the test
+# format used by scripts/fake_mocap_sender.py (bench profile).
+parser = "opti_json"
+rigid_body_id = 0            # the box rigid body; sits in the release region when at rest
 
 [ros2]
-# The cartesian controller listens on one topic; publishing pose targets drives it.
+# Confirmed on the robot host 2026-09-29 (ROS_DOMAIN_ID=33): mc_core subscribes
+# to "mx_mix_command" with mc_core_interface/msg/MechUnitCmdArray - one
+# cartesian command per mechanical unit, end_pose = flange pose in torso_flange,
+# which is exactly what palm_targets_to_tcp emits for the planner's palm
+# targets.  The launch shell must source /opt/ros/humble/setup.bash and
+# ~/ros_pkg/movax_interface/install/setup.bash (the robot-host .bashrc does
+# both); the domain id below is applied by the sink before the node is created.
 node_name = "moz1_catch_bridge"
-cartesian_topic = "TODO_cartesian_target_topic"
-# ROS message type, "package/MessageType". PLACEHOLDER until the spec is confirmed.
-message_type = "TODO_geometry_msgs/msg/PoseArray"
-# How the two hand targets map into the message: "left_then_right_pose_array" assumes
-# a PoseArray with pose[0]=left, pose[1]=right in torso_flange. Replace when known.
-message_layout = "TODO_left_then_right_pose_array"
+cartesian_topic = "mx_mix_command"
+message_type = "mc_core_interface/msg/MechUnitCmdArray"
+# cmds[0] = left arm (mu_idx 2, "left07"), cmds[1] = right arm (mu_idx 3,
+# "right07"); cartesian mode: use_jnt=false, psi=0.
+message_layout = "mech_unit_cmd_array_left_right"
 queue_size = 2
+ros_domain_id = 33           # the robot controller's DDS domain

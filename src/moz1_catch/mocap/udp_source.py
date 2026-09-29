@@ -6,9 +6,11 @@ in PARSERS under a short name and select it via config/interfaces.toml
 (device_t_s, position_in_device_units, quaternion_xyzw, tracking_state,
 rigid_body_id) or None for datagrams that are not the box rigid body.
 
-Until the real vendor format is implemented, parser "TODO_REPLACE_ME" (the
-config default) refuses to run; "prototype_json" decodes the documented test
-format used by scripts/fake_mocap_sender.py:
+Registered parsers:
+
+  "opti_json"      the real vendor stream (measured 2026-09-29, see the parser
+                   docstring for the captured packet shape)
+  "prototype_json" the documented test format used by scripts/fake_mocap_sender.py:
 
     {"t": 12.345, "id": 5, "x": 0.1, "y": -1.5, "z": 1.2,
      "qx": 0., "qy": 0., "qz": 0., "qw": 1., "state": 8}
@@ -37,17 +39,63 @@ def _parse_prototype_json(datagram: bytes) -> ParsedPacket:
             int(packet["id"]))
 
 
+def _parse_opti_json(datagram: bytes) -> ParsedPacket:
+    """Real mocap UDP stream, measured on the robot host 2026-09-29.
+
+    The device (192.168.12.3) sends two datagrams per mocap tick at 200 Hz:
+    a ~455-byte rigid-body frame and a 59-byte marker frame:
+
+      {"opti_frmIdx":527016,"opti_fTimestamp":"07:55:54.024",
+       "opti_rb_0_trackid":490978,"opti_rb_0_id":0,"opti_rb_0_tag":0,
+       "opti_rb_0_rigidtype":104,"opti_rb_0_px":-1.37283,"opti_rb_0_py":...,
+       "opti_rb_0_pz":...,"opti_rb_0_qw":-0.874895,"opti_rb_0_qx":...,
+       "opti_rb_0_qy":...,"opti_rb_0_qz":...,"opti_rb_0_meanError":0.00073,
+       "opti_rb_0_params":1,"opti_rb_0_btracked":1,
+       "opti_rb_0_markerTotalCnt":3,"opti_rb_0_markerVisibleCnt":3}
+      {"marker_frmIdx":527016,"marker_fTimestamp":"07:55:54.024"}
+
+    Conversions applied here:
+      * quaternion arrives wxyz, this repo uses xyzw;
+      * "HH:MM:SS.mmm" becomes seconds-of-day (a catch attempt is seconds long,
+        so the once-per-day midnight wrap cannot strike mid-run);
+      * the tracking state is the btracked flag (1 = tracked), so
+        frames.toml tracking_valid_states must contain 1;
+      * marker-only datagrams parse to None (counted as dropped, which is fine
+        - they pair 1:1 with rigid-body frames).
+    Returns the first rigid-body group of the frame; rigid-body-free frames
+    also parse to None.  When the device later streams several bodies in one
+    datagram, extend the slot loop to select by id.
+    """
+    packet = json.loads(datagram.decode("ascii"))
+    if "opti_frmIdx" not in packet:
+        return None
+    hours, minutes, seconds = packet["opti_fTimestamp"].split(":")
+    device_t = 3600. * int(hours) + 60. * int(minutes) + float(seconds)
+    slot = next((index for index in range(32) if f"opti_rb_{index}_id" in packet), None)
+    if slot is None:
+        return None
+    prefix = f"opti_rb_{slot}_"
+    return (device_t,
+            np.array((packet[prefix + "px"], packet[prefix + "py"], packet[prefix + "pz"]),
+                     dtype=float),
+            np.array((packet[prefix + "qx"], packet[prefix + "qy"],
+                      packet[prefix + "qz"], packet[prefix + "qw"]), dtype=float),
+            int(packet[prefix + "btracked"]),
+            int(packet[prefix + "id"]))
+
+
 def _parse_unimplemented(datagram: bytes) -> ParsedPacket:
     raise NotImplementedError(
-        "The real mocap UDP packet format is not implemented yet. Fill in a parser "
-        "in moz1_catch/mocap/udp_source.py, register it in PARSERS, and set "
-        "[mocap_udp] parser in config/interfaces.toml. For bench tests use "
-        "'prototype_json' with scripts/fake_mocap_sender.py.")
+        "The requested mocap UDP packet parser is not implemented. Register it "
+        "in moz1_catch/mocap/udp_source.py PARSERS and set [mocap_udp] parser in "
+        "config/interfaces.toml. For bench tests use 'prototype_json' with "
+        "scripts/fake_mocap_sender.py.")
 
 
 PARSERS = {
     "TODO_REPLACE_ME": _parse_unimplemented,
     "prototype_json": _parse_prototype_json,
+    "opti_json": _parse_opti_json,
 }
 
 

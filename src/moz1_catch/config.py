@@ -135,6 +135,7 @@ class Ros2Config:
     message_type: str
     message_layout: str
     queue_size: int
+    ros_domain_id: int = 0
 
 
 @dataclass(frozen=True)
@@ -361,6 +362,7 @@ def load_config(config_dir: Path, profile: str | None = None) -> Config:
         message_type=str(ros2_table["message_type"]),
         message_layout=str(ros2_table["message_layout"]),
         queue_size=int(ros2_table["queue_size"]),
+        ros_domain_id=int(ros2_table.get("ros_domain_id", 0)),
     )
 
     replay = None

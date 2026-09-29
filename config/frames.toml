@@ -9,32 +9,39 @@
 #   output: flange targets in torso_flange             (palm_targets_to_tcp)
 #
 #   T_MD  : box rigid body D as reported by mocap (global frame M)
-#   T_FM  : mocap global -> torso_flange  [PLACEHOLDER identity until hand-eye done]
+#   T_FM  : mocap global -> torso_flange  (hand-eye, calibrated 2026-09-28)
 #   T_DG  : box geometry frame from the rigid body (calibrated 2026-09-27)
 
 [frames]
-version = "placeholder-2026-09-28"
+version = "handeye-2026-09-28"
 
 [frames.mocap]
 position_units = "meters"        # "meters" | "millimeters"
 quaternion_order = "xyzw"
-tracking_valid_states = [8]      # CSV TrackingState convention; confirm for the UDP API
+tracking_valid_states = [1]      # opti_json reports the btracked flag (1=tracked);
+                                 # bench profile overrides to [8] for prototype_json
 # Device timestamp -> runtime host monotonic clock offset, seconds:
 #     t_host = t_device + offset
 # PLACEHOLDER 0.0; measure with the procedure in docs/deployment_plan.md section 6.3.
 clock_offset_s = 0.0
 
 [frames.extrinsics.T_FM]
-# PLACEHOLDER identity. Replace with the Park hand-eye result.  The calibration
-# robot-side inputs (P_i) must be end-effector poses expressed in torso_flange,
-# matching what the SDK/controller reports; the solver output is then directly
-# T_FM (mocap global -> torso_flange).  The runtime converts onward to base_link
-# with the fixed T_base_torso from robot.toml.  Re-calibrate after moving the
-# chassis or resetting the mocap global frame.
+# Park hand-eye result (eye-to-hand), calibrated 2026-09-28 in
+# ~/pingpong_moz1/mocap_calibration.json field "T_waist03_mocap":
+# 44 samples, robot_source=fk, RMSE 1.47 mm.
+# NAMING CAVEAT: the calibration source calls the robot-side frame
+# "waist03_cartesian" (mc_core's name for the legwaist MU cartesian frame),
+# but that frame IS torso_flange in this repo.  This matrix is therefore
+# T_FM = mocap global -> torso_flange, NOT a transform to any frame beyond
+# the flange; the runtime converts onward to base_link with the fixed
+# T_base_torso from robot.toml (verified on write-in: the base_link origin
+# lands at mocap (0.38, 0.09, 0.74) m, ~0.1 m above the mocap origin as
+# expected).  Re-calibrate after moving the chassis or resetting the mocap
+# global frame.
 matrix = [
-    [1.0, 0.0, 0.0, 0.0],
-    [0.0, 1.0, 0.0, 0.0],
-    [0.0, 0.0, 1.0, 0.0],
+    [0.1312114881965254, -0.011309562447936794, 0.9912898865430282, -0.7810500166547029],
+    [0.9910219351252707, -0.024398167582064083, -0.13145437809065702, -0.3016068161257964],
+    [0.025672348272353103, 0.9996383462112052, 0.0080067045848638, -1.3089104094800397],
     [0.0, 0.0, 0.0, 1.0],
 ]
 
