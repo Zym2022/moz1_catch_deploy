@@ -21,9 +21,11 @@ Guards carried over from move_to_ready: legwaist must already be locked at
 the ready posture (checked, never commanded), tracking-error and
 feedback-silence aborts, Ctrl+C stops publishing immediately.
 
-Usage (robot host, ROS_DOMAIN_ID=33, ROS + movax_interface sourced):
-    PYTHONPATH="src:$PYTHONPATH" python3 scripts/start_catch.py --dry-run
-    PYTHONPATH="src:$PYTHONPATH" python3 scripts/start_catch.py
+Usage (robot host, ROS + movax_interface sourced, ROS_DOMAIN_ID=33; the
+package is editable-installed - no PYTHONPATH prefix, it would clobber the
+sourced ROS package paths and rclpy would stop resolving):
+    .venv/bin/python scripts/start_catch.py --dry-run
+    .venv/bin/python scripts/start_catch.py
 """
 
 from __future__ import annotations

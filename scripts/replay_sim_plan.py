@@ -12,10 +12,12 @@ the configured command rate (120 Hz), then the final pose is held until Ctrl+C.
 Nothing here senses the box: prediction, commit timing and contact dynamics are
 out of scope; this checks the execution/output side only.
 
-Usage (robot host, ROS_DOMAIN_ID=33, ROS + movax_interface sourced):
-    PYTHONPATH="src:$PYTHONPATH" python3 scripts/replay_sim_plan.py --dry data/sim_plans/final_nominal_120hz_200ms.npz
-    PYTHONPATH="src:$PYTHONPATH" python3 scripts/replay_sim_plan.py data/sim_plans/final_nominal_120hz_200ms.npz
-    PYTHONPATH="src:$PYTHONPATH" python3 scripts/replay_sim_plan.py --speed-scale 0.5 --skip-approach <npz>
+Usage (robot host, ROS + movax_interface sourced, ROS_DOMAIN_ID=33; the
+package is editable-installed - do NOT prefix PYTHONPATH=..., it clobbers
+the ROS package paths setup.bash exported and rclpy stops resolving):
+    .venv/bin/python scripts/replay_sim_plan.py --dry data/sim_plans/final_nominal_120hz_200ms.npz
+    .venv/bin/python scripts/replay_sim_plan.py data/sim_plans/final_nominal_120hz_200ms.npz
+    .venv/bin/python scripts/replay_sim_plan.py --speed-scale 0.5 --skip-approach <npz>
 """
 
 from __future__ import annotations

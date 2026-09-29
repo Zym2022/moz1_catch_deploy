@@ -35,10 +35,18 @@ uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具�
    cd moz1_catch_deploy
    uv venv --system-site-packages      # 关键：叠加系统 rclpy
    uv pip install -e . && uv pip install pytest
-   .venv/bin/python -m pytest -q       # 判据：28 passed
+   .venv/bin/python -m pytest -q       # 判据：28 passed（此步不需要 ROS）
+   source /opt/ros/humble/setup.bash && source ~/ros_pkg/movax_interface/install/setup.bash
+   .venv/bin/python -c "import rclpy, mc_core_interface.msg"   # 判据：无 ModuleNotFoundError
    ```
    开发机上日常用 `uv sync`（隔离环境）即可；只有需要 rclpy 的实机运行用
    上面的 system-site-packages 方式。`uv.lock` 随仓库走，两端锁同一版本。
+   **切勿在机器人主机上运行 `uv sync`**：它会把 `.venv` 重建为隔离环境，
+   系统 rclpy 随即不可见（报 `ModuleNotFoundError: No module named
+   'rclpy'`）；已误跑的话 `rm -rf .venv` 后按上面三行重建。若 rclpy 仍
+   找不到，另查两点：当前终端是否 source 过 ROS（**每个新终端都要重新
+   source**）；命令是否带了 `PYTHONPATH=...` 前缀——它整体覆盖 source
+   得到的包路径（本包是可编辑安装，任何 PYTHONPATH 前缀都不要加）。
 2. **填接口占位**（`config/interfaces.toml`）：笛卡尔话题名、消息类型与布局；
    动捕 UDP 端口与报文解析器（在 `src/moz1_catch/mocap/udp_source.py` 的
    `PARSERS` 注册一个解析函数，参考 `prototype_json`）；实测控制器指令频率填

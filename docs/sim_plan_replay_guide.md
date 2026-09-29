@@ -20,12 +20,21 @@
 
 - [ ] 代码已同步到机器人主机，且 `.venv/bin/python -m pytest -q` 全绿
       （环境按 README「迁移步骤」第 1 步：`uv venv --system-site-packages`）。
-- [ ] 机器人主机 shell 已 source ROS 与 movax_interface，并 export 域号：
+- [ ] 机器人主机 shell 已 source ROS 与 movax_interface，并 export 域号
+      （**每个新开的终端都要重新执行一遍**，source 结果不跨终端）：
       ```bash
       source /opt/ros/humble/setup.bash
       source ~/ros_pkg/movax_interface/install/setup.bash
       export ROS_DOMAIN_ID=33
       ```
+- [ ] source 后自检 rclpy 与消息包在本仓库 venv 内可见（rclpy 的路径由
+      setup.bash 写入 PYTHONPATH，不 source 就不可见）：
+      ```bash
+      .venv/bin/python -c "import rclpy, mc_core_interface.msg; print('ros bridge OK')"
+      ```
+      报 `ModuleNotFoundError: No module named 'rclpy'` 见第 4 节排查表
+      第一行。注意命令**不要带任何 `PYTHONPATH=...` 前缀**：前缀会整体
+      覆盖 source 得到的 ROS 包路径（本包为可编辑安装，不需要前缀）。
 - [ ] **LegWaist 已锁定在准备姿态** `[0, 60, -90, 30, 0, 0]°`（±1°）。
       脚本不控制腰腿、只检查；不在位会拒绝启动。
 - [ ] 机械臂上电、控制器运行中；**首次运行加 `--enable-outer-ctrl`**
@@ -44,7 +53,7 @@ cd ~/workspace/moz1_catch_deploy
 **第 0 步 · 空跑（mock sink，不碰硬件，可先在开发机做）**
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
+.venv/bin/python scripts/replay_sim_plan.py \
     data/sim_plans/final_nominal_120hz_200ms.npz --dry --hold-s 0.2 --no-hold-final
 ```
 
@@ -61,7 +70,7 @@ PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
 **第 1 步 · 只看移动计划（不动机器人）**
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
+.venv/bin/python scripts/replay_sim_plan.py \
     data/sim_plans/final_nominal_120hz_200ms.npz --dry-run-approach
 ```
 
@@ -71,7 +80,7 @@ PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
 **第 2 步 · 半速实机首跑（推荐）**
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
+.venv/bin/python scripts/replay_sim_plan.py \
     data/sim_plans/final_nominal_120hz_200ms.npz --speed-scale 0.5 --enable-outer-ctrl
 ```
 
@@ -85,7 +94,7 @@ PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
 **第 3 步 · 全速回放**
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
+.venv/bin/python scripts/replay_sim_plan.py \
     data/sim_plans/final_nominal_120hz_200ms.npz --enable-outer-ctrl
 ```
 
@@ -109,7 +118,7 @@ PYTHONPATH=src .venv/bin/python scripts/replay_sim_plan.py \
 **与仿真参考对比**（量化判据：位置 ≤0.1 mm、姿态 ≤0.01° 量级）：
 
 ```bash
-PYTHONPATH=src .venv/bin/python - <<'EOF'
+.venv/bin/python - <<'EOF'
 import numpy as np
 from pathlib import Path
 from scipy.spatial.transform import Rotation
@@ -140,6 +149,7 @@ EOF
 
 | 现象 | 原因与处理 |
 | --- | --- |
+| `ModuleNotFoundError: No module named 'rclpy'` | 按序排查：① 当前终端没 source ROS——rclpy 的路径由 `setup.bash` 写入 PYTHONPATH，每个新终端都要重新 source（见前置条件自检）；② 命令带了 `PYTHONPATH=src` 之类前缀——整体覆盖了 source 得到的路径，去掉前缀重跑（本包可编辑安装，任何前缀都不要加）；③ `.venv` 是隔离环境（在机器人主机跑过 `uv sync`）——`rm -rf .venv` 后按 README 迁移步骤第 1 步用 `uv venv --system-site-packages` 重建。 |
 | `wait pose check` 超 10 mm / 5° | 帧系或 URDF 与仿真不一致（T_base_torso、T_tcp_palm、关节角被改过）。跑 `compute_palm_frames.py --check-base` 复核，先解决再上机。 |
 | `clamp violations` 非零 | 轨迹超出工作区盒或单步超速：先确认没有手改 `[safety]`/`[execution]`，再看是否加载了非 accept/异常的 trace。干净尝试必须为 0。 |
 | 机器人完全不动 | 外部控制未使能（加 `--enable-outer-ctrl`）；或 shell 没 source ROS/movax_interface；或 `ROS_DOMAIN_ID` 不是 33。 |

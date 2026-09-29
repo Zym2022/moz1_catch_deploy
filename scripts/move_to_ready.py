@@ -31,9 +31,11 @@ Operational note: like the teleop bridge, mc_core may ignore mix commands
 until outer control is enabled; pass --enable-outer-ctrl to call the
 robot_cmd_service first (EnableOuterCtrl).
 
-Usage (robot host, ROS_DOMAIN_ID=33, ROS + movax_interface sourced):
-    PYTHONPATH="src:$PYTHONPATH" python3 scripts/move_to_ready.py --dry-run
-    PYTHONPATH="src:$PYTHONPATH" python3 scripts/move_to_ready.py
+Usage (robot host, ROS + movax_interface sourced, ROS_DOMAIN_ID=33; the
+package is editable-installed - no PYTHONPATH prefix, it would clobber the
+sourced ROS package paths and rclpy would stop resolving):
+    .venv/bin/python scripts/move_to_ready.py --dry-run
+    .venv/bin/python scripts/move_to_ready.py
 """
 
 from __future__ import annotations
