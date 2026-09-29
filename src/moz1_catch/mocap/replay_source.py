@@ -52,8 +52,8 @@ def load_recording(path: Path) -> dict:
             or not np.isfinite(position).all() or not np.isfinite(quaternion).all()
             or np.any(np.abs(np.linalg.norm(quaternion, axis=1) - 1) > .01)):
         raise ValueError(f"{path}: invalid frames, timestamps, positions or quaternions")
-    # Same per-frame conversions as the offline study: rigid-body pose composed
-    # with the fixed T_DG (in the mocap frame), then the analysis basis change.
+    # Same per-frame conversions as the offline study: ^M T_G = ^M T_D @ ^D T_G,
+    # where ^D T_G is the inverse of the calibrated ^G T_D, then change basis.
     rotation = Rotation.from_quat(quaternion).as_matrix() @ R_GD.T
     center = position - np.einsum("nij,j->ni", rotation, C_GD)
     center = center @ ANALYSIS_BASIS_M.T

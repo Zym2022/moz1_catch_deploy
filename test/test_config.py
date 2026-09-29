@@ -37,7 +37,12 @@ def test_replay_profile_loads_with_analysis_prior():
                                atol=1e-12)
     assert config.prediction.settings.vertical_forecast_gain_per_m == pytest.approx(0.06827448239423729)
     assert config.catch_settings.plane_y == -0.58  # LATE_COMMIT baseline, base_link
-    assert config.frames.T_DG[0, 3] == pytest.approx(-0.0485375)
+    T_GD = np.array(((0., 1., 0., -0.0003), (0., 0., 1., 0.),
+                     (1., 0., 0., 0.0485375), (0., 0., 0., 1.)))
+    T_DG = np.array(((0., 0., 1., -0.0485375), (1., 0., 0., 0.0003),
+                     (0., 1., 0., 0.), (0., 0., 0., 1.)))
+    np.testing.assert_allclose(config.frames.T_DG, T_DG, atol=1e-12)
+    np.testing.assert_allclose(T_GD @ config.frames.T_DG, np.eye(4), atol=1e-12)
 
 
 def test_base_config_is_live_udp_ros2_base_link_planning():

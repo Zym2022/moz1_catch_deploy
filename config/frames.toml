@@ -10,7 +10,7 @@
 #
 #   T_MD  : box rigid body D as reported by mocap (global frame M)
 #   T_FM  : mocap global -> torso_flange  (hand-eye, calibrated 2026-09-28)
-#   T_DG  : box geometry frame from the rigid body (calibrated 2026-09-27)
+#   T_DG  : ^D T_G, box geometry G expressed in rigid body D (calibrated 2026-09-27)
 
 [frames]
 version = "handeye-2026-09-28"
@@ -58,8 +58,11 @@ matrix = [
 ]
 
 [frames.extrinsics.T_DG]
-# Rigid-body to box-geometry transform, manual calibration of 2026-09-27
-# (MozBoxer catching/docs/mocap_box_geometry_calibration_2026-09-27.md).
+# Manual calibration of 2026-09-27 (MozBoxer
+# catching/docs/mocap_box_geometry_calibration_2026-09-27.md):
+# ^G T_D = [[0, 1, 0, -0.0003], [0, 0, 1, 0],
+#           [1, 0, 0, 0.0485375], [0, 0, 0, 1]].
+# Store its inverse ^D T_G here, for ^M T_G = ^M T_D @ ^D T_G.
 matrix = [
     [0.0, 0.0, 1.0, -0.0485375],
     [1.0, 0.0, 0.0, 0.0003],

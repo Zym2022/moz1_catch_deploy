@@ -21,7 +21,7 @@ Per-sample input chain (column vectors, metres):
   T_MD         : box rigid body pose in the mocap global frame, as delivered
   T_FM         : mocap global -> torso_flange, from the Park hand-eye calibration
   T_base_torso : ^base T_torso, fixed while legwaist is locked (URDF FK value)
-  T_DG         : box geometry frame from the box rigid body (fixed installation)
+  T_DG         : ^D T_G, box geometry G expressed in rigid body D; inverse of ^G T_D
 
 The effective mocap->base rotation for the acceleration prior is
 R_base_torso @ R_FM (see rotate_prior): the analysis-frame prior and the
@@ -91,7 +91,7 @@ class FrameChain:
     """Converts one raw mocap rigid-body pose into the base_link planning frame."""
 
     T_FM: np.ndarray                 # mocap global -> torso_flange (hand-eye)
-    T_DG: np.ndarray                 # box geometry <- box rigid body (fixed)
+    T_DG: np.ndarray                 # ^D T_G: box geometry G -> rigid body D (fixed)
     T_base_torso: np.ndarray = field(default_factory=lambda: np.eye(4))
     position_scale: float = 1.0      # device units -> metres
 
