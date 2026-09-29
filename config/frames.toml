@@ -22,7 +22,19 @@ tracking_valid_states = [1]      # opti_json reports the btracked flag (1=tracke
                                  # bench profile overrides to [8] for prototype_json
 # Device timestamp -> runtime host monotonic clock offset, seconds:
 #     t_host = t_device + offset
-# PLACEHOLDER 0.0; measure with the procedure in docs/deployment_plan.md section 6.3.
+# clock_mode = "auto" (default): the UDP source measures this offset itself at
+#   every startup (calib.ArrivalClockAnchor) - it drains the socket backlog,
+#   anchors on the first fresh packet's arrival time, then refines once with
+#   the median of the first ~120 arrivals.  Re-anchoring per run makes the
+#   offset immune to host reboots (perf_counter resets), mocap clock jumps and
+#   the midnight seconds-of-day wrap; clock_offset_s below is then only a
+#   pre-anchor fallback/audit value.  The source logs mocap_clock_anchor=
+#   lines and every trace records device_t_s next to t_s, so the applied
+#   offset stays auditable offline.
+# clock_mode = "manual": use clock_offset_s below as-is (deterministic bench
+#   runs; the arm-swing cross-correlation of docs/deployment_plan.md section 6
+#   item 3 remains the higher-fidelity manual measurement).
+clock_mode = "auto"
 clock_offset_s = 0.0
 
 [frames.extrinsics.T_FM]

@@ -92,3 +92,12 @@ def test_missing_profile_and_files_raise(tmp_path):
     empty.mkdir()
     with pytest.raises(FileNotFoundError, match="catch.toml"):
         load_config(empty)
+
+
+def test_clock_mode_defaults_to_auto_and_is_validated(tmp_path):
+    assert load_config(CONFIG_DIR).frames.mocap.clock_mode == "auto"
+    bad = write_copy(tmp_path, {"frames.toml": [(
+        'clock_mode = "auto"\nclock_offset_s = 0.0',
+        'clock_mode = "drift"\nclock_offset_s = 0.0')]})
+    with pytest.raises(ValueError, match="clock_mode"):
+        load_config(bad)

@@ -127,3 +127,88 @@ class MocapClock:
 
     def to_host(self, t_device: float) -> float:
         return float(t_device) + self.offset_s
+
+
+class ArrivalClockAnchor:
+    """Device->host clock offset measured from datagram arrival times.
+
+    The runtime mixes two clocks: mocap samples carry device timestamps
+    (opti_fTimestamp seconds-of-day) while planning, execution and watchdog
+    timing run on time.perf_counter().  The offset is the difference between
+    the two readings of the SAME instant - a pure bookkeeping constant, not a
+    latency.  Measuring it per run makes it immune to host reboots
+    (perf_counter resets), mocap clock jumps and the midnight seconds-of-day
+    wrap:
+
+      * the first packet received after the socket backlog is drained provides
+        a provisional offset - its arrival time stands in for its capture
+        instant, absorbing the sub-millisecond transport latency;
+      * the median over the first refine_packets arrivals (or max_refine_s of
+        host time, whichever closes the window first) replaces it exactly
+        once; the shift is well under a millisecond and lands long before the
+        operator can arm a throw.
+
+    The anchor is then frozen; every trace records device_t_s next to t_s, so
+    the applied offset stays auditable offline.
+    """
+
+    def __init__(self, fallback_offset_s: float = 0.0, refine_packets: int = 120,
+                 max_refine_s: float = 2.0, log=None):
+        if refine_packets < 1 or max_refine_s <= 0:
+            raise ValueError("invalid clock anchoring window")
+        self._offset_s = float(fallback_offset_s)
+        self._refine_packets = int(refine_packets)
+        self._max_refine_s = float(max_refine_s)
+        self._log = log
+        self._diffs: list[float] | None = None
+        self._started_s = 0.0
+        self._installed = False
+
+    @property
+    def offset_s(self) -> float:
+        """Current best device->host offset (the fallback until first arrival)."""
+        return self._offset_s
+
+    @property
+    def anchored(self) -> bool:
+        """True once any arrival has replaced the fallback offset."""
+        return self._diffs is not None
+
+    def update(self, t_device: float, t_arrival_host: float) -> bool:
+        """Feed the device timestamp and host arrival time of one packet.
+
+        Returns True when offset_s changed (the provisional anchor, or the
+        single refinement install); False while collecting or after freezing.
+        """
+        diff = t_arrival_host - t_device
+        if self._diffs is None:
+            self._offset_s = diff
+            self._diffs = [diff]
+            self._started_s = t_arrival_host
+            self._announce(f"mocap_clock_anchor=provisional offset_s={diff:+.6f}")
+            return True
+        if not self._installed and not self._window_open(t_arrival_host):
+            return self._install()
+        if self._installed:
+            return False
+        self._diffs.append(diff)
+        if not self._window_open(t_arrival_host):
+            return self._install()
+        return False
+
+    def _window_open(self, t_arrival_host: float) -> bool:
+        return (len(self._diffs) < self._refine_packets
+                and t_arrival_host - self._started_s < self._max_refine_s)
+
+    def _install(self) -> bool:
+        self._installed = True
+        refined = float(np.median(self._diffs))
+        shift = refined - self._offset_s
+        self._offset_s = refined
+        self._announce(f"mocap_clock_anchor=refined offset_s={refined:+.6f} "
+                       f"samples={len(self._diffs)} shift_ms={1000. * shift:+.3f}")
+        return True
+
+    def _announce(self, message: str) -> None:
+        if self._log is not None:
+            self._log(message)

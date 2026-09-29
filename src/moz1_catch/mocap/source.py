@@ -10,7 +10,7 @@ import numpy as np
 
 @dataclass(frozen=True)
 class Observation:
-    """One box pose, already converted to the torso_flange planning frame.
+    """One box pose, already converted to the base_link planning frame.
 
     t_s is on the runtime host monotonic clock (time.perf_counter time base).
     valid is False for packets that arrived with a bad tracking state; they are

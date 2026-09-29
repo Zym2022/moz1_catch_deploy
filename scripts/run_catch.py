@@ -59,7 +59,8 @@ def main(argv=None) -> int:
                        position_scale=1. if config.frames.mocap.position_units == "meters" else .001)
     clock = MocapClock(offset_s=config.frames.mocap.clock_offset_s)
     source = UdpMocapSource(config.udp, frame, clock,
-                            config.frames.mocap.tracking_valid_states)
+                            config.frames.mocap.tracking_valid_states,
+                            auto_anchor=config.frames.mocap.clock_mode == "auto", log=log)
     trace = TraceRecorder(config)
     sink = build_sink(config, log)
     executor = Executor(sink, SafetyEnvelope(config.safety), config.execution,

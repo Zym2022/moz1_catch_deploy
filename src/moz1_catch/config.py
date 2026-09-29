@@ -86,6 +86,7 @@ class MocapConfig:
     quaternion_order: str
     tracking_valid_states: tuple[int, ...]
     clock_offset_s: float
+    clock_mode: str  # "auto": re-anchor per run in the UDP source; "manual": use clock_offset_s
     version: str
 
 
@@ -293,6 +294,9 @@ def load_config(config_dir: Path, profile: str | None = None) -> Config:
         raise ValueError("position_units must be meters or millimeters")
     if mocap_table["quaternion_order"] != "xyzw":
         raise ValueError("only the xyzw quaternion order is supported")
+    clock_mode = str(mocap_table.get("clock_mode", "auto"))
+    if clock_mode not in ("auto", "manual"):
+        raise ValueError('frames.mocap clock_mode must be "auto" or "manual"')
     frames = FramesConfig(
         T_FM=_matrix(frames_table["extrinsics"]["T_FM"], "matrix"),
         T_DG=_matrix(frames_table["extrinsics"]["T_DG"], "matrix"),
@@ -301,6 +305,7 @@ def load_config(config_dir: Path, profile: str | None = None) -> Config:
             quaternion_order=mocap_table["quaternion_order"],
             tracking_valid_states=tuple(int(state) for state in mocap_table["tracking_valid_states"]),
             clock_offset_s=float(mocap_table["clock_offset_s"]),
+            clock_mode=clock_mode,
             version=str(frames_table.get("version", "unversioned")),
         ),
     )

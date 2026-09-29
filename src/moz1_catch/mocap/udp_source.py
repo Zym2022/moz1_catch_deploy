@@ -20,10 +20,11 @@ from __future__ import annotations
 
 import json
 import socket
+import time
 
 import numpy as np
 
-from moz1_catch.calib import FrameChain, MocapClock
+from moz1_catch.calib import ArrivalClockAnchor, FrameChain, MocapClock
 from moz1_catch.config import UdpConfig
 from moz1_catch.mocap.source import Observation
 
@@ -100,10 +101,17 @@ PARSERS = {
 
 
 class UdpMocapSource:
-    """Blocking-with-timeout reader for one box rigid body."""
+    """Blocking-with-timeout reader for one box rigid body.
+
+    With auto_anchor=True the device->host clock offset is measured per run
+    (calib.ArrivalClockAnchor): the first next() drains everything queued
+    since bind, then the first fresh arrival anchors the offset and the
+    median of the following arrivals refines it once.  The clock handed in
+    only supplies the pre-anchor fallback offset.
+    """
 
     def __init__(self, udp: UdpConfig, chain: FrameChain, clock: MocapClock,
-                 valid_states: tuple[int, ...]):
+                 valid_states: tuple[int, ...], *, auto_anchor: bool = False, log=None):
         if udp.parser not in PARSERS:
             raise ValueError(f"unknown mocap parser {udp.parser!r}; known: {sorted(PARSERS)}")
         self._parse = PARSERS[udp.parser]
@@ -116,8 +124,33 @@ class UdpMocapSource:
         self._socket.setblocking(False)
         self._buffer = bytearray(65536)
         self.packets_dropped = 0
+        self._log = log
+        self._anchor = ArrivalClockAnchor(clock.offset_s, log=log) if auto_anchor else None
+        self._pending_drain = auto_anchor
+
+    @property
+    def clock_offset_s(self) -> float:
+        """The device->host offset currently applied to observations."""
+        return self._anchor.offset_s if self._anchor is not None else self._clock.offset_s
+
+    def _drain(self) -> int:
+        """Discard datagrams queued since bind so anchoring sees a fresh arrival."""
+        drained = 0
+        while True:
+            try:
+                self._socket.recvfrom_into(self._buffer)
+            except BlockingIOError:
+                return drained
+            except ConnectionResetError:
+                continue
+            drained += 1
 
     def next(self, timeout_s: float) -> Observation | None:
+        if self._pending_drain:
+            self._pending_drain = False
+            drained = self._drain()
+            if drained and self._log is not None:
+                self._log(f"mocap_clock_drained_backlog_datagrams={drained}")
         try:
             datagram, _ = self._socket.recvfrom_into(self._buffer)
         except BlockingIOError:
@@ -129,6 +162,8 @@ class UdpMocapSource:
             self.packets_dropped += 1
             return None
         device_t, position, quaternion, state, rigid_body_id = parsed
+        if self._anchor is not None and self._anchor.update(device_t, time.perf_counter()):
+            self._clock = MocapClock(offset_s=self._anchor.offset_s)
         if rigid_body_id != self._udp.rigid_body_id:
             self.packets_dropped += 1
             return None
