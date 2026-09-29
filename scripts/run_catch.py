@@ -68,16 +68,17 @@ def main(argv=None) -> int:
     runtime = CatchRuntime(config, source, executor, trace, log=log)
     try:
         result = runtime.run(max_wait_s=args.max_wait_s)
+        # The hold must publish through the LIVE sink, so it runs inside the
+        # try and the finally closes the sink only afterwards (the ordering
+        # replay_sim_plan.py uses; closing first crashed the hold's first
+        # publish with rclpy InvalidHandle on the destroyed publisher).
+        if config.execution.hold_after_finish and result.decision in ("accept", "reject"):
+            executor.hold_final_forever(log=log)  # exits on Ctrl+C ("hold released")
     finally:
         source.close()
         close = getattr(sink, "close", None)
         if close is not None:
             close()
-    if config.execution.hold_after_finish and result.decision in ("accept", "reject"):
-        try:
-            executor.hold_final_forever(log=log)
-        except KeyboardInterrupt:
-            pass
     log(f"attempt finished: decision={result.decision} reason={result.reason!r}")
     return 0 if result.decision == "accept" else 1
 
