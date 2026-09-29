@@ -84,22 +84,41 @@ def named_angles(legwaist_deg, left_arm_deg, right_arm_deg) -> dict[str, float]:
     return angles
 
 
+def palms_from_angles(joints: dict, angles_rad: dict[str, float]) -> tuple[np.ndarray, np.ndarray]:
+    """Per-hand palm target-frame poses ^base T_palm at arbitrary joint angles.
+
+    The exact chain the wait poses come from (robot_geometry), evaluated at any
+    angle set: the feedback recorder uses it to turn measured /joint_states
+    into palm poses in base_link - the commanded targets' frame, so the two
+    series compare without any further transform.
+    """
+    positions = np.empty((len(HAND_NAMES), 3))
+    quats = np.empty((len(HAND_NAMES), 4))
+    for index, side in enumerate(HAND_NAMES):
+        offset = np.asarray(PALM_CENTER_OFFSETS_BODY_M[index])
+        T_flange_hand = joints[f"{side}_hand_palm_joint"]["T_origin"]
+        T_base_hand = chain_transform(joints, "base_link", f"{side}_flange", angles_rad) @ T_flange_hand
+        rotation = Rotation.from_matrix(T_base_hand[:3, :3])
+        quat = rotation.as_quat()  # xyzw
+        if quat[3] < 0:
+            quat = -quat
+        positions[index] = T_base_hand[:3, 3] + rotation.apply(offset)
+        quats[index] = quat
+    return positions, quats
+
+
 def robot_geometry(joints: dict, legwaist_deg, left_arm_deg, right_arm_deg) -> dict:
     """Derive every robot constant from the posture angles and the URDF."""
     angles = named_angles(legwaist_deg, left_arm_deg, right_arm_deg)
     T_base_torso = chain_transform(joints, "base_link", "torso_flange", angles)
+    wait_positions, wait_quats = palms_from_angles(joints, angles)
     hands = {}
-    for side in HAND_NAMES:
-        offset = np.asarray(PALM_CENTER_OFFSETS_BODY_M[0 if side == "left" else 1])
+    for index, side in enumerate(HAND_NAMES):
+        offset = np.asarray(PALM_CENTER_OFFSETS_BODY_M[index])
         T_flange_hand = joints[f"{side}_hand_palm_joint"]["T_origin"]
-        T_base_hand = chain_transform(joints, "base_link", f"{side}_flange", angles) @ T_flange_hand
-        rotation = Rotation.from_matrix(T_base_hand[:3, :3])
-        wait_quat = rotation.as_quat()  # xyzw
-        if wait_quat[3] < 0:
-            wait_quat = -wait_quat
         hands[side] = dict(
-            wait_position_m=T_base_hand[:3, 3] + rotation.apply(offset),
-            wait_quat_xyzw=wait_quat,
+            wait_position_m=wait_positions[index],
+            wait_quat_xyzw=wait_quats[index],
             # ^palm T_flange: hand->flange re-expressed at the tangent-plane centre.
             T_palm_flange=as_transform(np.eye(3), -offset) @ transform_inverse(T_flange_hand),
         )

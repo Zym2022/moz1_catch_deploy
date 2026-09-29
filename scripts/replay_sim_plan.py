@@ -33,6 +33,8 @@ from scipy.spatial.transform import Rotation
 
 from moz1_catch.config import load_config
 from moz1_catch.executor import Executor
+from moz1_catch.feedback import JointFeedbackLog, fk_palm_series, tracking_summary
+from moz1_catch.kinematics import parse_joints
 from moz1_catch.robot.mock_sink import MockCartesianSink
 from moz1_catch.safety import SafetyEnvelope
 from moz1_catch.sim_plan import load_sim_trace_plan
@@ -70,15 +72,56 @@ def preflight(config, plan, info, log=print) -> bool:
     return True
 
 
+def record_feedback(config, feedback, commands, stamps, streamed, log=print) -> dict:
+    """FK the recorded joints into base_link palm poses; return trace extras.
+
+    This is what makes the replay answerable: commanded targets vs what the
+    arms actually did, in the same frame, in the same trace.npz.  Tracking is
+    evaluated on the execute phase only (the hold segments would dilute the
+    lag estimate with static zero-error samples).
+    """
+    if feedback is None or not len(feedback):
+        log("feedback         : none recorded (mock sink or silent /joint_states)")
+        return {}
+    joints = parse_joints(config.robot.posture.urdf)
+    arrays = feedback.arrays()
+    palm_position, palm_rotation = fk_palm_series(
+        joints, config.robot.posture.legwaist_joint_deg,
+        arrays["feedback_joint_left_rad"], arrays["feedback_joint_right_rad"])
+    extras = {**arrays, "feedback_palm_position": palm_position,
+              "feedback_palm_rotation_xyzw": palm_rotation}
+    execute = np.asarray(commands["phase"]) == "execute"
+    try:
+        tracking = tracking_summary(stamps[execute], streamed[execute],
+                                    arrays["feedback_t_s"], palm_position)
+    except ValueError as error:
+        log(f"feedback         : {len(feedback)} snapshots, "
+            f"tracking not computable ({error})")
+        return extras
+    lag_left_ms = tracking["left"]["lag_s"] * 1000.
+    lag_right_ms = tracking["right"]["lag_s"] * 1000.
+    worst_mm = max(tracking[side]["error_max_mm"] for side in ("left", "right"))
+    extras.update(tracking_lag_left_ms=lag_left_ms, tracking_lag_right_ms=lag_right_ms,
+                  tracking_error_max_mm=worst_mm)
+    log(f"feedback         : {len(feedback)} joint snapshots -> tracking "
+        f"lag L {lag_left_ms:+.0f} / R {lag_right_ms:+.0f} ms, "
+        f"max error {worst_mm:.1f} mm (see check_replay_tracking.py)")
+    return extras
+
+
 def run_replay(config, plan, info, hold_s: float, no_hold_final: bool, log=print) -> int:
     """Phase B: stream the plan through the Executor at the command rate."""
+    feedback = None
     if config.sink_kind == "mock":
         sink = MockCartesianSink()
         log("using MOCK command sink (no hardware commands)")
     else:
         from moz1_catch.robot.ros2_sink import Ros2CartesianSink
         sink = Ros2CartesianSink(config.ros2)
-        log(f"ros2 cartesian sink on topic {config.ros2.cartesian_topic}")
+        feedback = JointFeedbackLog()
+        sink.attach_joint_feedback(feedback)
+        log(f"ros2 cartesian sink on topic {config.ros2.cartesian_topic} "
+            f"(recording /joint_states feedback)")
     trace = TraceRecorder(config)
     trace.event(f"sim plan replay: {Path(info['source']).name} "
                 f"(speed scale {info['speed_scale']})")
@@ -121,8 +164,9 @@ def run_replay(config, plan, info, hold_s: float, no_hold_final: bool, log=print
             f"max {tick_periods.max() * 1000:.1f} ms)")
         log(f"clamp violations : {violations} (must be 0)")
         log(f"streamed speed   : {speeds.max():.2f} m/s peak")
+        extra = record_feedback(config, feedback, commands, stamps, streamed, log=log)
         attempt_dir = trace.save(config.logging.output_dir, decision="replay",
-                                 reason="sim_plan_replay", extra=info)
+                                 reason="sim_plan_replay", extra={**info, **extra})
         log(f"trace saved      : {attempt_dir}")
 
         if config.execution.hold_after_finish and not no_hold_final:

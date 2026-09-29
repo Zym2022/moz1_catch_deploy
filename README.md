@@ -7,14 +7,14 @@
 
 核心算法层（`src/moz1_catch/core/`）是 MozBoxer 的逐字移植，仅依赖 numpy/scipy；
 桥接代码（动捕输入、机器人输出、状态机、指令流）全部为本包新写，与算法层解耦。
-当前状态：**28 项测试全部通过**，含五条实物自由飞行记录的端到端回放
+当前状态：**68 项测试全部通过**，含五条实物自由飞行记录的端到端回放
 （决策与 2026-09-28 冻结研究一致：2 号接受，1/3/4/5 拒绝）。
 
 ## 快速开始（开发机，无 ROS）
 
 ```bash
 uv sync                      # 建 .venv 并安装（含 dev 测试组）
-uv run pytest -q             # 28 项测试，约 10 s（回放实时步进）
+uv run pytest -q             # 68 项测试，约 12 s（回放实时步进）
 uv run python scripts/dry_run_replay.py --csv data/box_flying_csv/2.csv
 uv run python scripts/check_frames.py --chain-check
 uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具交叉验证
@@ -35,7 +35,7 @@ uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具�
    cd moz1_catch_deploy
    uv venv --system-site-packages      # 关键：叠加系统 rclpy
    uv pip install -e . && uv pip install pytest
-   .venv/bin/python -m pytest -q       # 判据：28 passed（此步不需要 ROS）
+   .venv/bin/python -m pytest -q       # 判据：68 passed（此步不需要 ROS）
    source /opt/ros/humble/setup.bash && source ~/ros_pkg/movax_interface/install/setup.bash
    .venv/bin/python -c "import rclpy, mc_core_interface.msg"   # 判据：无 ModuleNotFoundError
    ```
@@ -141,12 +141,13 @@ config/          四个 TOML + profiles（全部可调参数在此；内部一�
 src/moz1_catch/
   core/          移植的预测与规划（勿改语义；改动需与 MozBoxer 同步）
   calib.py       入口变换链 T_BG = T_base_torso·T_FM·T_MD·T_DG、时钟、先验换算
+  feedback.py    /joint_states 反馈记录、FK 实测掌位姿、指令-实物跟踪滞后分析
   mocap/         UDP 监听（解析器占位）与 CSV 回放
   kinematics.py  URDF FK：关节角 → 等待位姿/T_base_torso/T_tcp_palm（加载时推导）
   robot/         ROS2 发布（单点适配）、掌→法兰换算与 mock sink
   runtime.py     状态机；executor.py 指令流；safety.py 钳位；trace.py 记录
-scripts/         run_catch / start_catch / move_to_ready / replay_sim_plan / dry_run_replay / check_frames / compute_palm_frames / fake_mocap_sender
-test/            61 项测试（含仿真规划回放 sim_plan 的 8 项）
+scripts/         run_catch / start_catch / move_to_ready / replay_sim_plan / check_replay_tracking / dry_run_replay / check_frames / compute_palm_frames / fake_mocap_sender
+test/            68 项测试（含仿真规划回放 sim_plan 的 8 项、反馈记录/跟踪分析与绘图 7 项）
 data/            五条实物自由飞行记录 + moz1_boxer.urdf（FK 用）+ sim_plans/（冻结的仿真规划，回放用）
 docs/            deployment_plan.md（设计文档）、sim_plan_replay_guide.md（仿真规划实物回放操作指南）
 output/          每次尝试的 trace（git 忽略）

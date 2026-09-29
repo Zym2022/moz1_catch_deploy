@@ -136,6 +136,22 @@ class Ros2CartesianSink:
         self._publisher.publish(message)
         self._rclpy.spin_once(self._node, timeout_sec=0)
 
+    def attach_joint_feedback(self, log) -> None:
+        """Subscribe /joint_states on the sink node, feeding a JointFeedbackLog.
+
+        The node is spun once per send() (i.e. at the command rate), so
+        callbacks drain while the executor streams; the deeper best-effort
+        queue keeps bursts from dropping the latest state.  Mirrors the
+        phase-A JointStateReader subscription in scripts/move_to_ready.py.
+        """
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
+        from sensor_msgs.msg import JointState
+
+        self._node.create_subscription(
+            JointState, "/joint_states",
+            lambda message: log.on_message(message.name, message.position),
+            QoSProfile(depth=200, reliability=ReliabilityPolicy.BEST_EFFORT))
+
     def close(self) -> None:
         self._node.destroy_node()
         if self._owns_rclpy:

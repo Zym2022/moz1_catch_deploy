@@ -112,8 +112,12 @@ cd ~/workspace/moz1_catch_deploy
 
 - `trace.npz`：与仿真 trace 键名对齐（`target_palm_position` 为实际发送的
   掌目标、`command_tcp_position` 为换算后的法兰指令、`command_clamped`
-  为钳位标记、`command_phase` 为 hold/execute/done 阶段）。
-- `meta.json`：配置快照、关节角、本次回放的元信息（源文件、speed scale 等）。
+  为钳位标记、`command_phase` 为 hold/execute/done 阶段）。2026-09-29 起
+  还同步记录实物反馈（`feedback_t_s`、`feedback_joint_{left,right}_rad`、
+  `feedback_palm_position/rotation_xyzw`——实测关节角经 URDF FK 换算成的
+  base_link 掌位姿，与指令同帧同档，可直接对比）。
+- `meta.json`：配置快照、关节角、本次回放的元信息（源文件、speed scale，
+  及 `tracking_lag_{left,right}_ms` / `tracking_error_max_mm` 快照）。
 
 **与仿真参考对比**（量化判据：位置 ≤0.1 mm、姿态 ≤0.01° 量级）：
 
@@ -144,6 +148,34 @@ print(f"max rotation error: {np.degrees(np.array(err_r).max()):.3f} deg")
 print(f"clamp violations  : {sum(len(c) for c in rep['command_clamped'])}")
 EOF
 ```
+
+**实物跟踪对比**（2026-09-29 起回放自动记录 `/joint_states` 反馈）：
+
+回放期间 sink 节点同时订阅 `/joint_states`，实测关节角经 URDF FK 换算成
+base_link 掌位姿，与指令一起写入 trace（见上文 `feedback_*` 键）。分析：
+
+```bash
+.venv/bin/python scripts/check_replay_tracking.py                                # 最新一次
+.venv/bin/python scripts/check_replay_tracking.py output/attempt_<时间戳>_replay  # 指定某次
+```
+
+加 `--plot` 可在 attempt 目录落一张 `tracking.png`（或 `--plot <路径>` 指定位置，
+`--show` 弹窗）：逐轴指令 vs 实测位置曲线（execute 段底纹、接触时刻红虚线）、
+指令 vs 实测速度、零滞后/补偿后误差曲线、base_link 3D 掌轨迹叠加（起点圆点、
+终点叉号）。图上标签用 ASCII（机器人主机的 matplotlib 无中文字形）。matplotlib
+是 dev 依赖（`uv sync` 自带；system-site-packages 环境用 `uv pip install
+matplotlib`，不要用 apt 版——它与 numpy 2 二进制不兼容）。
+
+输出每只手的零滞后误差（均值/最大）、最优常值滞后（正 = 实际落后于指令）、
+滞后补偿后残差、指令 vs 实测峰值速度——这是第 3 步"控制器能否跟上 120 Hz
+位姿流、滞后多少"的量化答案。解读注意：
+
+- 滞后是主机钟端到端量（指令发布 → `/joint_states` 到达，含反馈传输延迟），
+  不是控制器内部延迟；若要沿指令流前移补偿，用补偿后残差仍小的那个值。
+- 最优滞后落在 ±150 ms 搜索边界时脚本会标注 *estimate unreliable*：通常
+  说明误差以偏置为主（帧系/FK 问题）而非滞后主导，先解决偏置再读滞后。
+- 分析窗口取 execute 段（hold 静止段会稀释滞后估计）；旧 trace 无
+  `feedback_*` 键时脚本会明确提示需重跑回放。
 
 ## 4. 故障排查
 
