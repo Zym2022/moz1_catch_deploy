@@ -54,8 +54,8 @@ def main(argv=None) -> int:
                         help="phase A motion time in s; default: derived from --max-joint-speed")
     parser.add_argument("--max-joint-speed", type=float, default=DEFAULT_PEAK_SPEED_RAD_S,
                         help=f"peak joint speed cap in rad/s (default {DEFAULT_PEAK_SPEED_RAD_S})")
-    parser.add_argument("--rate-hz", type=float, default=100.,
-                        help="phase A command publication rate")
+    parser.add_argument("--rate-hz", type=float, default=120.,
+                        help="phase A command publication rate (controller standard: 120 Hz)")
     parser.add_argument("--max-tracking-error", type=float, default=0.2,
                         help="abort when any arm joint deviates this far from the command, rad")
     parser.add_argument("--legwaist-tolerance", type=float, default=math.radians(1.),

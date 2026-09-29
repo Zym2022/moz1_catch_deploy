@@ -179,7 +179,12 @@ UDP/CSV ──Observation──▶ runtime 状态机 ──Commit──▶ estim
    结果写入 `frames.toml`；底盘搬动或动捕重置后重标。入口换算到 base_link 由
    固定常量 T_base_torso 完成，不需要额外操作。
 2. **箱体刚体 T_DG**：已标定（2026-09-27），已写入默认配置；重建刚体后重核。
-3. **时钟偏置**：挥臂相关法测动捕设备钟 → 宿主钟偏置，写入 `frames.toml`；
+3. **时钟偏置**：已实现启动期自动锚定（`clock_mode = "auto"`，`calib.ArrivalClockAnchor`）：
+   UDP 源首次读取前排空积压报文，以首个新报文的到达时刻锚定设备钟→宿主钟偏置，再用
+   前 ~120 个到达的中位数精化一次后冻结（日志打 `mocap_clock_anchor=`；trace 里
+   `device_t_s` 与 `t_s` 并存，可离线复核实际生效的偏置）。每次运行重新锚定，主机重启
+   （perf_counter 归零）、动捕钟跳变、跨午夜秒数回绕都不再使偏置失效。挥臂相关法保留为
+   高保真手动交叉核对；`clock_mode = "manual"` + `clock_offset_s` 供确定性测试使用。
    运行期漂移以 `max_observation_age_s`（30 ms）兜底拒旧帧。
 4. **加速度先验换系与竖直修正**：T_FM 定好后运行 `scripts/check_frames.py`，
    其打印的 base_link 先验（经等效外参 T_base_torso @ T_FM 换算）覆盖
@@ -199,7 +204,8 @@ UDP/CSV ──Observation──▶ runtime 状态机 ──Commit──▶ estim
    确为 `left_flange`/`right_flange`；若不同，在 `[robot.mounting_overrides]`
    填实测矩阵覆盖推导值。
 7. **接口确认**：笛卡尔话题名/消息类型/布局；动捕 UDP 报文格式与端口；
-   控制器可接收的指令频率（填 `command_period_s`）。
+   控制器可接收的指令频率（已确认 120 Hz，`command_period_s = 1/120`，
+   2026-09-29 与控制器开发人员核对）。
 8. **延迟实测**：指令流首条到位姿起动的端到端延迟，填 `command_latency_s`；
    用动捕末端刚体记录轨迹跟踪滞后，若稳定滞后 τ，可整体前移时间轴补偿。
 

@@ -127,7 +127,7 @@ def legwaist_check(reader: JointStateReader, ready_rad: np.ndarray,
 
 def move_arms_to_ready(node, publisher, message_cls, current: dict[str, np.ndarray],
                        target: dict[str, np.ndarray], *, duration_s: float,
-                       rate_hz: float = 100., max_tracking_error_rad: float = 0.2,
+                       rate_hz: float = 120., max_tracking_error_rad: float = 0.2,
                        feedback_timeout_s: float = 0.5, hold_s: float = 1.0,
                        reader: JointStateReader | None = None, log=print) -> bool:
     """Run the quintic joint move; returns True when both arms end at target.
@@ -208,7 +208,8 @@ def main(argv=None) -> int:
                         help="total motion time in s; default: derived from --max-joint-speed")
     parser.add_argument("--max-joint-speed", type=float, default=DEFAULT_PEAK_SPEED_RAD_S,
                         help=f"peak joint speed cap in rad/s (default {DEFAULT_PEAK_SPEED_RAD_S})")
-    parser.add_argument("--rate-hz", type=float, default=100., help="command publication rate")
+    parser.add_argument("--rate-hz", type=float, default=120.,
+                        help="command publication rate (controller standard: 120 Hz)")
     parser.add_argument("--max-tracking-error", type=float, default=0.2,
                         help="abort when any arm joint deviates this far from the command, rad")
     parser.add_argument("--legwaist-tolerance", type=float, default=math.radians(1.),

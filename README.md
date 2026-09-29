@@ -74,7 +74,7 @@ uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具�
      `fake_mocap_sender.py --csv data/box_flying_csv/2.csv`（sender 会先做
      逆链变换，bench 走的是真实输入链）；确认日志里 `catch_decision`、
      `planning_time_ms`、指令步长合理（参考值：规划 <15 ms，
-     10 ms 周期下单步 ≤16 mm）。
+     120 Hz（8.3 ms 周期）下单步 ≤14 mm）。
 6. **低速实接**：降低释放高度/初速、软地面、专人监护；每次投掷的
    `output/attempt_*/` 留档。首次判据是"双侧接触窗口按预测出现"，不是"接住"。
 
@@ -137,8 +137,9 @@ src/moz1_catch/
   kinematics.py  URDF FK：关节角 → 等待位姿/T_base_torso/T_tcp_palm（加载时推导）
   robot/         ROS2 发布（单点适配）、掌→法兰换算与 mock sink
   runtime.py     状态机；executor.py 指令流；safety.py 钳位；trace.py 记录
-scripts/         run_catch / dry_run_replay / check_frames / compute_palm_frames / fake_mocap_sender
-test/            28 项测试（2 个移植 + 4 个新写）
-data/            五条实物自由飞行记录 + moz1_boxer.urdf（FK 用）
+scripts/         run_catch / start_catch / move_to_ready / replay_sim_plan / dry_run_replay / check_frames / compute_palm_frames / fake_mocap_sender
+test/            61 项测试（含仿真规划回放 sim_plan 的 8 项）
+data/            五条实物自由飞行记录 + moz1_boxer.urdf（FK 用）+ sim_plans/（冻结的仿真规划，回放用）
+docs/            deployment_plan.md（设计文档）、sim_plan_replay_guide.md（仿真规划实物回放操作指南）
 output/          每次尝试的 trace（git 忽略）
 ```

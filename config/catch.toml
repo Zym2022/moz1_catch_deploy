@@ -70,7 +70,7 @@ max_cartesian_speed_mps = 3.5        # per-hand command speed cap
 watchdog_s = 0.15                    # publication gap that triggers a fault hold
 
 [execution]
-command_period_s = 0.010             # pose target publication period; MEASURE the controller rate
+command_period_s = 0.008333333333333333  # 120 Hz - the cartesian controller's standard command rate (confirmed with the controller developers, 2026-09-29)
 command_latency_s = 0.005            # plan ready -> controller starts moving; MEASURE on hardware
 settle_margin_s = 0.10               # keep streaming this long beyond stop_time
 reject_duration_s = 0.25             # blend duration on the reject path
