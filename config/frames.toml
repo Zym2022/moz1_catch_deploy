@@ -10,10 +10,11 @@
 #
 #   T_MD  : box rigid body D as reported by mocap (global frame M)
 #   T_FM  : mocap global -> torso_flange  (hand-eye, calibrated 2026-09-28)
-#   T_DG  : ^D T_G, box geometry G expressed in rigid body D (calibrated 2026-09-27)
+#   T_DG  : ^D T_G, box geometry G expressed in rigid body D
+#           (TEST recalibration 2026-09-30, supersedes the 2026-09-27 manual one)
 
 [frames]
-version = "handeye-2026-09-28"
+version = "handeye-2026-09-28+dgtest-2026-09-30"
 
 [frames.mocap]
 position_units = "meters"        # "meters" | "millimeters"
@@ -24,8 +25,11 @@ tracking_valid_states = [1]      # opti_json reports the btracked flag (1=tracke
 #     t_host = t_device + offset
 # clock_mode = "auto" (default): the UDP source measures this offset itself at
 #   every startup (calib.ArrivalClockAnchor) - it drains the socket backlog,
-#   anchors on the first fresh packet's arrival time, then refines once with
-#   the median of the first ~120 arrivals.  Re-anchoring per run makes the
+#   anchors on the first fresh packet's arrival time, discards the first ~300
+#   startup-warmed arrivals (they land tens of ms late; a median over them
+#   froze the offset 35 ms high on 2026-09-30 and aborted commits as "invalid
+#   execution delay"), then refines once with the median of the following
+#   ~600 arrivals.  Re-anchoring per run makes the
 #   offset immune to host reboots (perf_counter resets), mocap clock jumps and
 #   the midnight seconds-of-day wrap; clock_offset_s below is then only a
 #   pre-anchor fallback/audit value.  The source logs mocap_clock_anchor=
@@ -58,14 +62,29 @@ matrix = [
 ]
 
 [frames.extrinsics.T_DG]
-# Manual calibration of 2026-09-27 (MozBoxer
-# catching/docs/mocap_box_geometry_calibration_2026-09-27.md):
-# ^G T_D = [[0, 1, 0, -0.0003], [0, 0, 1, 0],
-#           [1, 0, 0, 0.0485375], [0, 0, 0, 1]].
-# Store its inverse ^D T_G here, for ^M T_G = ^M T_D @ ^D T_G.
+# TEST recalibration 2026-09-30 (empirical, rotation only), deployed while the
+# rigid-body-to-box axes are under investigation.  Derived from the live
+# opti_json stream so that the box AS PLACED at capture time (dominant static
+# solution: 1557/1599 frames, 8/8 markers, pos std 0.31 mm, euler YXZ
+# yaw 33.08 / pitch 0.37 / roll 1.37 deg) reads exactly
+#     x_G -> +Z_mocap,  y_G -> +X_mocap,  z_G -> +Y_mocap (vertical)
+# via  R_DG = R_MD_measured^T @ [[0,1,0],[0,0,1],[1,0,0]].
+# Today's physical placement therefore defines the zero-yaw reference (the
+# ~33 deg room yaw is absorbed into this matrix).  TRANSLATION is UNCHANGED
+# from 2026-09-27: no re-measure of the box-centre offset was taken, and if
+# the old rotation really was wrong the 4.85 cm offset direction is suspect
+# too - re-measure before trusting G's origin absolutely.
+# NOTE: mocap/replay_source.py keeps its own hardcoded copy of the 09-27
+# constants so the offline-study replay regression stays bit-identical; only
+# the live UDP path uses this matrix.
+# Rollback = restore the 09-27 matrix (source: ^G T_D =
+#   [[0, 1, 0, -0.0003], [0, 0, 1, 0], [1, 0, 0, 0.0485375], [0, 0, 0, 1]],
+#   MozBoxer catching/docs/mocap_box_geometry_calibration_2026-09-27.md):
+#   [[0.0, 0.0, 1.0, -0.0485375], [1.0, 0.0, 0.0, 0.0003],
+#    [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
 matrix = [
-    [0.0, 0.0, 1.0, -0.0485375],
-    [1.0, 0.0, 0.0, 0.0003],
-    [0.0, 1.0, 0.0, 0.0],
+    [-0.54549017749, 0.837776770388, 0.0238861729722, -0.0485375],
+    [0.0183764321636, -0.0165374712139, 0.999694362686, 0.0003],
+    [0.837915731445, 0.545762397975, -0.00637431988159, 0.0],
     [0.0, 0.0, 0.0, 1.0],
 ]

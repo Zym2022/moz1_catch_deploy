@@ -37,12 +37,17 @@ def test_replay_profile_loads_with_analysis_prior():
                                atol=1e-12)
     assert config.prediction.settings.vertical_forecast_gain_per_m == pytest.approx(0.06827448239423729)
     assert config.catch_settings.plane_y == -0.58  # LATE_COMMIT baseline, base_link
-    T_GD = np.array(((0., 1., 0., -0.0003), (0., 0., 1., 0.),
-                     (1., 0., 0., 0.0485375), (0., 0., 0., 1.)))
-    T_DG = np.array(((0., 0., 1., -0.0485375), (1., 0., 0., 0.0003),
-                     (0., 1., 0., 0.), (0., 0., 0., 1.)))
+    # T_DG: TEST recalibration 2026-09-30 - rotation derived from the live
+    # stream so the box as placed reads x_G->+Z_mocap, y_G->+X_mocap (provenance
+    # and rollback matrix in config/frames.toml); translation kept from the
+    # 09-27 manual calibration.  Pin the deployed values so any future
+    # recalibration consciously updates this test too.
+    T_DG = np.array(((-0.54549017749, 0.837776770388, 0.0238861729722, -0.0485375),
+                     (0.0183764321636, -0.0165374712139, 0.999694362686, 0.0003),
+                     (0.837915731445, 0.545762397975, -0.00637431988159, 0.),
+                     (0., 0., 0., 1.)))
     np.testing.assert_allclose(config.frames.T_DG, T_DG, atol=1e-12)
-    np.testing.assert_allclose(T_GD @ config.frames.T_DG, np.eye(4), atol=1e-12)
+    np.testing.assert_allclose(T_DG[:3, :3] @ T_DG[:3, :3].T, np.eye(3), atol=1e-9)  # SO(3)
 
 
 def test_base_config_is_live_udp_ros2_base_link_planning():

@@ -147,7 +147,10 @@ def main(argv=None) -> int:
     code = run_catch.main(["--config-dir", str(args.config_dir),
                            "--profile", args.profile,
                            "--max-wait-s", str(args.max_wait_s)])
-    rclpy.shutdown()
+    # Ctrl+C that released the hold already shut the context down through
+    # rclpy's own SIGINT handler; only shut down what is still up.
+    if rclpy.ok():
+        rclpy.shutdown()
     return code
 
 

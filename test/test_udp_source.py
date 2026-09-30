@@ -96,30 +96,50 @@ def _stamp(device_t: float) -> str:
 
 
 def test_arrival_anchor_provisional_median_then_frozen():
-    anchor = ArrivalClockAnchor(fallback_offset_s=99.0, refine_packets=4)
+    anchor = ArrivalClockAnchor(fallback_offset_s=99.0, warmup_packets=0, refine_packets=4)
     assert anchor.offset_s == 99.0 and not anchor.anchored
     assert anchor.update(900.000, 100.000) is True        # provisional anchor
     assert anchor.anchored and anchor.offset_s == pytest.approx(-800.0)
     assert anchor.update(900.005, 100.005) is False       # still collecting
     assert anchor.update(900.010, 100.010) is False
-    assert anchor.update(900.015, 100.015) is True        # 4th sample closes: median
+    assert anchor.update(900.015, 100.015) is False
+    assert anchor.update(900.020, 100.020) is True        # 4th post-anchor sample closes
     assert anchor.offset_s == pytest.approx(-800.0)
     assert anchor.update(800.000, 100.000) is False       # frozen afterwards
     assert anchor.offset_s == pytest.approx(-800.0)
 
 
 def test_arrival_anchor_median_drops_a_stale_provisional_packet():
-    anchor = ArrivalClockAnchor(refine_packets=5)
+    anchor = ArrivalClockAnchor(warmup_packets=0, refine_packets=5)
     assert anchor.update(1000.000, 60.010) is True        # 10 ms stale outlier
     assert anchor.offset_s == pytest.approx(-939.990)
-    for device, host in ((1000.005, 60.005), (1000.010, 60.010), (1000.015, 60.015)):
+    for device, host in ((1000.005, 60.005), (1000.010, 60.010), (1000.015, 60.015),
+                         (1000.020, 60.020)):
         assert anchor.update(device, host) is False
-    assert anchor.update(1000.020, 60.020) is True        # 5th sample closes
-    assert anchor.offset_s == pytest.approx(-940.0)       # stale sample outvoted
+    assert anchor.update(1000.025, 60.025) is True        # 5th post-anchor sample closes
+    assert anchor.offset_s == pytest.approx(-940.0)       # stale sample not in the median
+
+
+def test_arrival_anchor_median_ignores_startup_warmup_arrivals():
+    # Measured 2026-09-30 on the robot host: the first arrivals ride process
+    # startup and land ~35 ms late; the median must reflect the steady state
+    # that follows, not the warmup (a warmup-biased median put every t_s into
+    # the future and aborted commits as "invalid execution delay").
+    anchor = ArrivalClockAnchor(warmup_packets=3, refine_packets=4)
+    assert anchor.update(1000.000, 60.035) is True        # provisional, +35 ms late
+    assert anchor.offset_s == pytest.approx(-939.965)
+    assert anchor.update(1000.005, 60.040) is False       # warmup, discarded
+    assert anchor.update(1000.010, 60.045) is False
+    assert anchor.update(1000.015, 60.050) is False
+    assert anchor.update(1000.020, 60.020) is False       # steady state collected
+    assert anchor.update(1000.025, 60.025) is False
+    assert anchor.update(1000.030, 60.030) is False
+    assert anchor.update(1000.035, 60.035) is True        # window closes: install
+    assert anchor.offset_s == pytest.approx(-940.000)     # NOT the warmup median
 
 
 def test_arrival_anchor_closes_by_elapsed_time_and_installs_median():
-    anchor = ArrivalClockAnchor(refine_packets=1000, max_refine_s=1.0)
+    anchor = ArrivalClockAnchor(warmup_packets=0, refine_packets=1000, max_refine_s=1.0)
     anchor.update(0.0, 10.0)
     assert anchor.update(0.1, 10.1) is False
     assert anchor.update(0.2, 10.2) is False
@@ -130,9 +150,11 @@ def test_arrival_anchor_closes_by_elapsed_time_and_installs_median():
 
 def test_arrival_anchor_rejects_invalid_window():
     with pytest.raises(ValueError):
-        ArrivalClockAnchor(refine_packets=0)
+        ArrivalClockAnchor(warmup_packets=0, refine_packets=0)
     with pytest.raises(ValueError):
         ArrivalClockAnchor(max_refine_s=0.)
+    with pytest.raises(ValueError):
+        ArrivalClockAnchor(warmup_packets=-1)
 
 
 def test_udp_source_auto_anchor_drains_backlog_and_anchors_on_arrival():

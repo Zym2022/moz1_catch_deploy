@@ -272,7 +272,8 @@ def main(argv=None) -> int:
                             feedback_timeout_s=args.feedback_timeout,
                             hold_s=args.hold_s, reader=reader)
     node.destroy_node()
-    rclpy.shutdown()
+    if rclpy.ok():      # a Ctrl+C during the hold already shut rclpy's context down
+        rclpy.shutdown()
     return 0 if ok else 1
 
 

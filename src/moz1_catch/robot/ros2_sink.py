@@ -154,5 +154,7 @@ class Ros2CartesianSink:
 
     def close(self) -> None:
         self._node.destroy_node()
-        if self._owns_rclpy:
+        # Ctrl+C lets rclpy's own SIGINT handler (installed by rclpy.init) shut
+        # the context down first; shutting down again raises RCLError.
+        if self._owns_rclpy and self._rclpy.ok():
             self._rclpy.shutdown()

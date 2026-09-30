@@ -143,20 +143,29 @@ class ArrivalClockAnchor:
       * the first packet received after the socket backlog is drained provides
         a provisional offset - its arrival time stands in for its capture
         instant, absorbing the sub-millisecond transport latency;
-      * the median over the first refine_packets arrivals (or max_refine_s of
-        host time, whichever closes the window first) replaces it exactly
-        once; the shift is well under a millisecond and lands long before the
+      * the first warmup_packets arrivals are then DISCARDED before any
+        statistics: measured 2026-09-30 on the robot host, the first ~1.5 s of
+        arrivals ride process startup (imports, backlog drain, first-pass
+        numpy warmup) and land tens of ms late relative to steady state - a
+        median over them froze the offset 35 ms high, put every observation's
+        t_s ~35 ms into the future and aborted the commit as an "invalid
+        execution delay";
+      * the median over the following refine_packets arrivals (or max_refine_s
+        of host time measured from warmup end, whichever closes the window
+        first) replaces the provisional offset exactly once.  At the 200 Hz
+        stream this freezes ~4.5 s after start - still long before the
         operator can arm a throw.
 
     The anchor is then frozen; every trace records device_t_s next to t_s, so
     the applied offset stays auditable offline.
     """
 
-    def __init__(self, fallback_offset_s: float = 0.0, refine_packets: int = 120,
-                 max_refine_s: float = 2.0, log=None):
-        if refine_packets < 1 or max_refine_s <= 0:
+    def __init__(self, fallback_offset_s: float = 0.0, warmup_packets: int = 300,
+                 refine_packets: int = 600, max_refine_s: float = 6.0, log=None):
+        if warmup_packets < 0 or refine_packets < 1 or max_refine_s <= 0:
             raise ValueError("invalid clock anchoring window")
         self._offset_s = float(fallback_offset_s)
+        self._warmup_left = int(warmup_packets)
         self._refine_packets = int(refine_packets)
         self._max_refine_s = float(max_refine_s)
         self._log = log
@@ -178,19 +187,25 @@ class ArrivalClockAnchor:
         """Feed the device timestamp and host arrival time of one packet.
 
         Returns True when offset_s changed (the provisional anchor, or the
-        single refinement install); False while collecting or after freezing.
+        single refinement install); False while warming up, collecting or
+        after freezing.
         """
         diff = t_arrival_host - t_device
         if self._diffs is None:
             self._offset_s = diff
-            self._diffs = [diff]
+            self._diffs = []
             self._started_s = t_arrival_host
             self._announce(f"mocap_clock_anchor=provisional offset_s={diff:+.6f}")
             return True
-        if not self._installed and not self._window_open(t_arrival_host):
-            return self._install()
         if self._installed:
             return False
+        if self._warmup_left > 0:
+            self._warmup_left -= 1
+            if self._warmup_left == 0:
+                self._started_s = t_arrival_host  # time the refine window from steady state
+            return False
+        if not self._window_open(t_arrival_host):
+            return self._install()
         self._diffs.append(diff)
         if not self._window_open(t_arrival_host):
             return self._install()

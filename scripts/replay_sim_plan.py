@@ -298,7 +298,10 @@ def main(argv=None) -> int:
     finally:
         if owns_rclpy:
             import rclpy
-            rclpy.shutdown()
+            # A Ctrl+C that released the final hold already shut the context
+            # down through rclpy's own SIGINT handler; only shut what is up.
+            if rclpy.ok():
+                rclpy.shutdown()
 
 
 if __name__ == "__main__":

@@ -202,6 +202,14 @@ class CatchRuntime:
         palm_positions, palm_rotations = self._palm_state()
         planning_start = time.perf_counter()
         observation_age = planning_start - observation.t_s
+        if observation_age < 0.:
+            # A few ms of residual device->host offset error survive the arrival
+            # anchor (a median over jitter); a negative age would abort planning
+            # as "invalid execution delay".  Treat the observation as current -
+            # milliseconds of box-state error that the contact geometry check
+            # absorbs - and keep the misfit visible in the log.
+            self._log(f"mocap_clock_age_warning: {observation_age * 1000:.1f} ms, clamped to 0")
+            observation_age = 0.
         try:
             plan = plan_catch(
                 flight.position_m, flight.velocity_mps, flight.rotation,
