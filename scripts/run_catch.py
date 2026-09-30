@@ -21,6 +21,7 @@ import sys
 from moz1_catch.calib import FrameChain, MocapClock
 from moz1_catch.config import load_config
 from moz1_catch.executor import Executor
+from moz1_catch.feedback import trace_feedback_extras
 from moz1_catch.mocap.udp_source import UdpMocapSource
 from moz1_catch.robot.mock_sink import MockCartesianSink
 from moz1_catch.runtime import CatchRuntime
@@ -31,13 +32,18 @@ DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "config"
 
 
 def build_sink(config, log):
+    """(sink, feedback log | None): the ros2 sink also records /joint_states."""
     if config.sink_kind == "mock":
         log("using MOCK command sink (no hardware commands)")
-        return MockCartesianSink()
+        return MockCartesianSink(), None
+    from moz1_catch.feedback import JointFeedbackLog
     from moz1_catch.robot.ros2_sink import Ros2CartesianSink
     sink = Ros2CartesianSink(config.ros2)
-    log(f"ros2 cartesian sink on topic {config.ros2.cartesian_topic}")
-    return sink
+    feedback = JointFeedbackLog()
+    sink.attach_joint_feedback(feedback)
+    log(f"ros2 cartesian sink on topic {config.ros2.cartesian_topic} "
+        f"(recording /joint_states feedback)")
+    return sink, feedback
 
 
 def main(argv=None) -> int:
@@ -62,10 +68,17 @@ def main(argv=None) -> int:
                             config.frames.mocap.tracking_valid_states,
                             auto_anchor=config.frames.mocap.clock_mode == "auto", log=log)
     trace = TraceRecorder(config)
-    sink = build_sink(config, log)
+    sink, feedback = build_sink(config, log)
     executor = Executor(sink, SafetyEnvelope(config.safety), config.execution,
                         config.robot, trace)
-    runtime = CatchRuntime(config, source, executor, trace, log=log)
+    # Measured arm poses FK'd into base_link land in the trace at save time, so
+    # every live attempt keeps commanded-vs-actual palm tracking next to the
+    # box observations (see feedback.trace_feedback_extras).
+    extra_provider = (lambda: trace_feedback_extras(
+        config, feedback, *trace.command_series(), log=log)
+        if feedback is not None else None)
+    runtime = CatchRuntime(config, source, executor, trace, log=log,
+                           extra_provider=extra_provider)
     try:
         result = runtime.run(max_wait_s=args.max_wait_s)
         # The hold must publish through the LIVE sink, so it runs inside the

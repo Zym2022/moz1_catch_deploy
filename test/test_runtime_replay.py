@@ -75,12 +75,13 @@ def synthetic_throw(acceleration=(0., 0., -9.81)):
     return flight, samples
 
 
-def make_runtime(config, source):
+def make_runtime(config, source, extra_provider=None):
     trace = TraceRecorder(config)
     sink = MockCartesianSink()
     executor = Executor(sink, SafetyEnvelope(config.safety), config.execution,
                         config.robot, trace)
-    runtime = CatchRuntime(config, source, executor, trace, log=lambda *_: None)
+    runtime = CatchRuntime(config, source, executor, trace, log=lambda *_: None,
+                           extra_provider=extra_provider)
     return runtime, sink, trace
 
 
@@ -195,6 +196,30 @@ def test_recorded_throws_replay_with_pinned_decisions(tmp_path):
     for name in ("1.csv", "2.csv", "3.csv", "4.csv", "5.csv"):
         expected = "accept" if name == "2.csv" else "reject"
         assert decisions[name][0] == expected, (name, decisions[name])
+
+
+def test_extra_provider_fields_land_in_the_saved_trace(tmp_path):
+    """The live feedback hook: whatever extra_provider returns at save time is
+    merged into the trace (npz arrays + meta scalars) without affecting the
+    attempt itself."""
+    config = replay_config(ROOT / "data/box_flying_csv/1.csv", downsample_hz=120.)
+    config = replace(config, logging=replace(config.logging, output_dir=tmp_path))
+    _, samples = synthetic_throw()
+    calls = []
+
+    def provider():
+        calls.append(1)
+        return {"feedback_t_s": np.arange(3.), "tracking_lag_left_ms": -7.5}
+
+    runtime, _, _ = make_runtime(config, SyntheticSource(samples),
+                                 extra_provider=provider)
+    result = runtime.run(max_wait_s=5.)
+    assert result.decision == "accept", result.reason
+    assert calls == [1]                      # invoked exactly once, at save time
+    with np.load(Path(result.trace_dir) / "trace.npz") as trace:
+        np.testing.assert_allclose(trace["feedback_t_s"], np.arange(3.))
+    meta = json.loads((Path(result.trace_dir) / "meta.json").read_text())
+    assert meta["scalar_extra"]["tracking_lag_left_ms"] == pytest.approx(-7.5)
 
 
 def test_udp_source_loopback_with_prototype_parser():

@@ -66,6 +66,12 @@ class TraceRecorder:
             np.array([rotation.as_quat() for rotation in tcp_targets.rotations]))
         record["clamped"].append(clamped)
 
+    def command_series(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Recorded commands as arrays: (t_host, phase, clamped palm position)."""
+        return (np.asarray(self.commands["t_host"]),
+                np.asarray(self.commands["phase"]),
+                np.asarray(self.commands["palm_position"]).reshape(-1, 2, 3))
+
     def save(self, output_dir: Path, decision: str, reason: str, extra: dict) -> Path:
         stamp = time.strftime("%Y%m%d_%H%M%S")
         attempt_dir = output_dir / f"attempt_{stamp}_{decision}"

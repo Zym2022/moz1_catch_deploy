@@ -56,13 +56,17 @@ class AttemptResult:
 
 class CatchRuntime:
     def __init__(self, config: Config, source: BoxObservationSource, executor: Executor,
-                 trace: TraceRecorder, palm_state_provider=None, log=print):
+                 trace: TraceRecorder, palm_state_provider=None, log=print,
+                 extra_provider=None):
         self._config = config
         self._source = source
         self._executor = executor
         self._trace = trace
         self._log = log
         self._palm_state = palm_state_provider or self._configured_palm_state
+        # Optional callable returning extra trace fields, invoked once at save
+        # time (e.g. live /joint_states feedback FK + tracking, never real-time).
+        self._extra_provider = extra_provider
 
     def _configured_palm_state(self):
         robot = self._config.robot
@@ -361,4 +365,9 @@ class CatchRuntime:
             extra.update(
                 observation_box_pose=np.r_[self._commit_observation.position_m,
                                            self._commit_observation.quat_xyzw])
+        if self._extra_provider is not None:
+            try:
+                extra.update(self._extra_provider())
+            except Exception as error:  # noqa: BLE001 - extras must never lose the trace
+                self._log(f"trace extra provider failed: {error!r}")
         return extra

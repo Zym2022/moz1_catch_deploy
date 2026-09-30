@@ -135,3 +135,43 @@ def test_tracking_figure_renders(tmp_path):
     import matplotlib.pyplot as plt
     plt.close(figure)
     assert output.stat().st_size > 20_000   # a real rendered figure, not a blank
+
+
+def test_trace_feedback_extras_fk_ready_posture_onto_wait_pose():
+    """The live extras path: ready-posture joints must FK exactly onto the
+    configured wait poses, and a wait-pose command stream must track at zero
+    lag - the identity that makes commanded-vs-actual comparison meaningful."""
+    from moz1_catch.feedback import trace_feedback_extras
+
+    config = load_config(CONFIG_DIR)
+    posture = config.robot.posture
+    log = JointFeedbackLog(clock=FakeClock())
+    left = np.deg2rad(posture.left_arm_joint_deg)
+    right = np.deg2rad(posture.right_arm_joint_deg)
+    for _ in range(10):
+        log.on_message([f"LeftArm-{i}" for i in range(7)], left)
+        log.on_message([f"RightArm-{i}" for i in range(7)], right)
+
+    t_command = 1000.042 + np.arange(30) * (1. / 120.)   # spans the FakeClock stamps
+    wait = np.array([hand.wait_position_m for hand in config.robot.hands])
+    command = np.tile(wait, (30, 1, 1))
+    extras = trace_feedback_extras(config, log, t_command,
+                                   np.full(30, "execute"), command, log=lambda *_: None)
+    assert set(("feedback_t_s", "feedback_joint_left_rad", "feedback_joint_right_rad",
+                "feedback_palm_position", "feedback_palm_rotation_xyzw")) <= set(extras)
+    # One snapshot per message once both arms are known: count-agnostic compare
+    measured = extras["feedback_palm_position"]
+    np.testing.assert_allclose(measured, np.tile(wait, (len(measured), 1, 1)),
+                               atol=1e-9)   # FK(ready joints) == the wait poses
+    # A constant command series makes the lag unidentifiable (every lag has
+    # zero error), so only the identity error is asserted here; lag estimation
+    # is covered by the moving-series tests above.
+    assert extras["tracking_error_max_mm"] < 1e-6
+
+
+def test_trace_feedback_extras_handles_missing_feedback():
+    from moz1_catch.feedback import trace_feedback_extras
+
+    config = load_config(CONFIG_DIR)
+    assert trace_feedback_extras(config, None, np.arange(2.), ["execute", "execute"],
+                                 np.zeros((2, 2, 3)), log=lambda *_: None) == {}

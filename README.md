@@ -84,7 +84,9 @@ uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具�
      `planning_time_ms`、指令步长合理（参考值：规划 <15 ms，
      120 Hz（8.3 ms 周期）下单步 ≤14 mm）。
 6. **低速实接**：降低释放高度/初速、软地面、专人监护；每次投掷的
-   `output/attempt_*/` 留档。首次判据是"双侧接触窗口按预测出现"，不是"接住"。
+   `output/attempt_*/` 留档。2026-09-30 起 live 尝试同步记录 `/joint_states`
+   实测反馈（FK 成 base_link 掌位姿 + 指令-实测跟踪摘要入 trace），
+   `check_replay_tracking.py` 可直接分析任意一次尝试。首次判据是"双侧接触窗口按预测出现"，不是"接住"。
 
 ## 注意事项（容易踩的坑）
 

@@ -28,7 +28,7 @@ import time
 
 import numpy as np
 
-from moz1_catch.kinematics import named_angles, palms_from_angles
+from moz1_catch.kinematics import named_angles, palms_from_angles, parse_joints
 
 LEFT_JOINTS = tuple(f"LeftArm-{index}" for index in range(7))
 RIGHT_JOINTS = tuple(f"RightArm-{index}" for index in range(7))
@@ -89,6 +89,47 @@ def fk_palm_series(joints: dict, legwaist_deg, left_rad, right_rad) -> tuple[np.
                               np.degrees(left_rad[index]), np.degrees(right_rad[index]))
         positions[index], quats[index] = palms_from_angles(joints, angles)
     return positions, quats
+
+
+def trace_feedback_extras(config, feedback, command_t_s, command_phase,
+                          command_palm_position, log=print) -> dict:
+    """Live-attempt trace extras: FK'd measured palms + command-vs-actual tracking.
+
+    run_catch passes this as the runtime's extra_provider, called once at trace
+    save time (never in the real-time path): the recorded /joint_states
+    snapshots are FK'd into base_link palm poses - the commanded series' frame,
+    so they compare without any further transform - and the execute-phase
+    tracking summary is appended.  Every live attempt then answers, from one
+    trace, what was commanded, where the arms actually went, and what the box
+    did.  Empty/silent feedback yields {} (mock sink or dead /joint_states).
+    """
+    if feedback is None or not len(feedback):
+        log("feedback         : none recorded (mock sink or silent /joint_states)")
+        return {}
+    joints = parse_joints(config.robot.posture.urdf)
+    arrays = feedback.arrays()
+    palm_position, palm_rotation = fk_palm_series(
+        joints, config.robot.posture.legwaist_joint_deg,
+        arrays["feedback_joint_left_rad"], arrays["feedback_joint_right_rad"])
+    extras = {**arrays, "feedback_palm_position": palm_position,
+              "feedback_palm_rotation_xyzw": palm_rotation}
+    execute = np.asarray(command_phase) == "execute"
+    try:
+        tracking = tracking_summary(np.asarray(command_t_s)[execute],
+                                    np.asarray(command_palm_position)[execute],
+                                    arrays["feedback_t_s"], palm_position)
+    except ValueError as error:
+        log(f"feedback         : {len(feedback)} snapshots, "
+            f"tracking not computable ({error})")
+        return extras
+    extras.update(tracking_lag_left_ms=tracking["left"]["lag_s"] * 1000.,
+                  tracking_lag_right_ms=tracking["right"]["lag_s"] * 1000.,
+                  tracking_error_max_mm=max(tracking[side]["error_max_mm"]
+                                             for side in ("left", "right")))
+    log(f"feedback         : {len(feedback)} joint snapshots -> tracking lag "
+        f"L {tracking['left']['lag_s'] * 1000:+.0f} / R {tracking['right']['lag_s'] * 1000:+.0f} ms, "
+        f"max error {extras['tracking_error_max_mm']:.1f} mm")
+    return extras
 
 
 def interp_position(t_s, series: np.ndarray, query_s) -> np.ndarray:
