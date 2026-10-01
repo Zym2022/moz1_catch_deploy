@@ -9,7 +9,7 @@ Provenance (see PROVENANCE.md at the deploy package root):
   with the target point staying the centre of the front tangent plane.
   ``PALM_CENTER_OFFSETS_BODY_M`` is expressed in the hand-link axes and refers
   to that tangent-plane centre (see the block comment below).
-- Coating spheres: 12 spheres per palm, 30 mm radius, 4x2x3 grid.
+- Coating spheres: 12 spheres per palm, 30 mm radius, 4x3 grid.
   ``PALM_SPHERE_OFFSETS_BODY_M`` is relative to the palm target point so it can
   be passed directly as ``palm_sphere_offsets_body`` of ``plan_catch``.
 
@@ -51,6 +51,11 @@ COATING_SPHERE_CENTERS_BODY_M = tuple(
     tuple((x, y, z) for x in (.040, .080, .120, .160) for z in (-.030, 0., .030))
     for y in (-.020, .010)
 )
+
+# Runtime collision geometry from MozBoxer/tasks/direct/mozboxer/palm_coating.py.
+# These are the simulation's design dimensions, not measured physical CAD.
+PALM_CORE_CENTERS_BODY_M = ((.100, -.020, 0.), (.100, .010, 0.))
+PALM_CORE_SIZE_M = (.140, .020, .070)
 
 PALM_SPHERE_OFFSETS_BODY_M = (np.asarray(COATING_SPHERE_CENTERS_BODY_M)
                               - np.asarray(PALM_CENTER_OFFSETS_BODY_M)[:, None, :])

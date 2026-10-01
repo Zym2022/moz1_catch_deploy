@@ -138,6 +138,14 @@ uv run python scripts/compute_palm_frames.py --check-base   # URDF FK + 夹具�
 
 ## 目录速览
 
+实物日志的离线三维回放：`.venv/bin/python scripts/replay_real_robot.py --self-check`，
+生成 `output/real_robot_replay/index.html`，直接用浏览器打开。
+显示动捕箱体、URDF 双臂反馈姿态、掌指令轨迹及关节曲线，支持逐帧、时间轴与海绵尺寸调整。
+默认读取本仓库 `output/attempt_*/`；也可传入单个试次目录。
+URDF、`data/meshes/` 网格与回放代码随 Git 同步，实验日志和生成网页不进入 Git。
+在开发机或机器人主机上 `git pull --ff-only` 后，即可使用本机日志生成回放，无需 MozBoxer 仿真项目。
+详见 [回放说明](docs/real_robot_replay.md)。
+
 ```
 config/          四个 TOML + profiles（全部可调参数在此；内部一律 base_link 系，与仿真一致）
 src/moz1_catch/
@@ -150,7 +158,7 @@ src/moz1_catch/
   runtime.py     状态机；executor.py 指令流；safety.py 钳位；trace.py 记录
 scripts/         run_catch / start_catch / move_to_ready / replay_sim_plan / check_replay_tracking / dry_run_replay / check_frames / compute_palm_frames / fake_mocap_sender
 test/            68 项测试（含仿真规划回放 sim_plan 的 8 项、反馈记录/跟踪分析与绘图 7 项）
-data/            五条实物自由飞行记录 + moz1_boxer.urdf（FK 用）+ sim_plans/（冻结的仿真规划，回放用）
+data/            五条实物自由飞行记录 + moz1_boxer.urdf + meshes/（回放资产）+ sim_plans/（冻结的仿真规划）
 docs/            deployment_plan.md（设计文档）、sim_plan_replay_guide.md（仿真规划实物回放操作指南）
 output/          每次尝试的 trace（git 忽略）
 ```

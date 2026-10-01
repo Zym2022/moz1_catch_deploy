@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | `src/moz1_catch/core/prediction.py` | `MozBoxer/catching/prediction.py` | commit `f603888`（2026-09-29 提交；含 200/160 ms 窗口与竖直经验修正） | 无（逐字拷贝，已 diff 核验一致） |
 | `src/moz1_catch/core/one_shot.py` | `MozBoxer/catching/one_shot.py` | 同上 | 两处 import 改为 `moz1_catch.core.*`；`CATCH_BOX_DIMENSIONS_M` → `BOX_DIMENSIONS_M` |
-| `src/moz1_catch/core/geometry.py` | `tasks/direct/mozboxer/motions/dataset_schema.py` 的 `PALM_CENTER_OFFSETS_BODY_M`、`PALM_NORMAL_AXES_BODY`；`tasks/direct/mozboxer/palm_coating.py` 的 `CENTERS_M`、`RADIUS_M`；`catching/box_asset.py` 的尺寸/质量 | 同上 | 抽取为独立常数模块 |
+| `src/moz1_catch/core/geometry.py` | `tasks/direct/mozboxer/motions/dataset_schema.py` 的 `PALM_CENTER_OFFSETS_BODY_M`、`PALM_NORMAL_AXES_BODY`；`tasks/direct/mozboxer/palm_coating.py` 的 `CENTERS_M`、`RADIUS_M`、`CORE_CENTERS_M`、`CORE_SIZE_M`；`catching/box_asset.py` 的尺寸/质量 | 同上 | 抽取为独立常数模块；2026-10-01 补充刚芯常数供离线回放，未修改规划行为 |
 | `test/test_prediction.py` | `test/test_catching_prediction.py` | 同上 | 仅 import 改写 |
 | `test/test_one_shot.py` | `test_catching_one_shot.py` | 同上 | 仅 import 改写 |
 | `src/moz1_catch/mocap/replay_source.py` 的加载/分段规则 | `scripts/analyze_moz1_box_mocap.py` 的 `load_csv`、`flight_interval`；`scripts/validate_moz1_box_prediction.py` 的 `observations` 降采样与重定心 | 同上 | 移植为类；savolg 参数与规则不变 |
@@ -25,6 +25,11 @@
 - [x] MozBoxer 源提交已回填：`7231c7d`、`f603888`（最新同步点）
 
 ## 数据出处
+
+`data/meshes/`：从 MozBoxer 提交 `f603888ad7677c5c86f47809dcc105575c9152a0` 的
+`source/MozBoxer/assets/moz1/meshes/` 逐字拷贝当前部署 URDF 引用的 20 个 STL。
+2026-10-01 纳入 Git，供开发机与机器人主机独立生成离线回放；新实物日志与
+生成网页仍在被 Git 忽略的 `output/`，不随仓库同步。
 
 `data/box_flying_csv/1..5.csv`：`MozBoxer/catching/box_flying_data/csv/` 的逐字拷贝
 （动捕导出，原生 200 Hz，含手持段）。五条记录的 SHA256 见 MozBoxer 侧

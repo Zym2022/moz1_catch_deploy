@@ -3,4 +3,5 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+# Per-machine experiment logs and generated replay/analysis artifacts.
 output/

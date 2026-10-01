@@ -1,0 +1,2 @@
+# Generated third-party bundle; shader string whitespace is intentional.
+scripts/replay_vendor/three-orbit.min.js -diff -whitespace
