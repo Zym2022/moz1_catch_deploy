@@ -39,9 +39,13 @@ max_observation_age_s = 0.03
 # max_palm_speed = 3.0
 # max_palm_acceleration = 48.0
 # close_duration = 0.08
-# retreat_distance = 0.20
+# cushion_distance = 0.08        # lateral/chestward cushion (retreat_distance before 2026-10-08)
+# cushion_distance_z = 0.20      # supportive vertical glide
+# settle_center_x = 0.12         # lateral recentring target after the cushion
+# settle_duration = 0.30
 # max_retreat_depth = 0.10
 # max_retreat_center_y = -0.45
+# min_retreat_center_z = 0.75
 # max_height_error = 0.28
 
 # Waiting-for-throw arming logic; all thresholds on mocap-observed box speed.

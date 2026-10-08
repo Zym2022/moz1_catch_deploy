@@ -350,6 +350,7 @@ class CatchRuntime:
                 contact_positions_m=plan.contact_positions, stop_positions_m=plan.stop_positions,
                 contact_normals=plan.contact_normals,
                 retreat_velocity_mps=plan.retreat_velocity, retreat_durations_s=plan.retreat_durations,
+                settle_displacement_m=plan.settle_displacement, settle_start_s=plan.settle_start,
                 predicted_touch_times_s=np.asarray(plan.predicted_touch_times_s),
                 predicted_touch_normal_cosines=np.asarray(plan.predicted_touch_normal_cosines),
                 relative_tangent_mps=np.asarray(plan.relative_tangent_speed))

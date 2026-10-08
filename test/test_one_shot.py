@@ -1,6 +1,6 @@
 """One-shot timing, side contact and bounded smooth retreat contracts.
 
-Ported from MozBoxer test_catching_one_shot.py (working tree of 2026-09-28); only the
+Ported from MozBoxer test_catching_one_shot.py (commit 3a2b5c0); only the
 imports changed.
 """
 
@@ -11,13 +11,13 @@ import pytest
 from scipy.spatial.transform import Rotation
 from moz1_catch.core import one_shot
 
-from moz1_catch.core.geometry import (
-    COATING_SPHERE_CENTERS_BODY_M as CENTERS_M, PALM_CENTER_OFFSETS_BODY_M,
-)
 from moz1_catch.core.one_shot import (
     CatchSettings, _geometry_samples, _geometry_score, estimate_box_state, plan_catch,
 )
 from moz1_catch.core.prediction import PredictionSettings
+from moz1_catch.core.geometry import (
+    COATING_SPHERE_CENTERS_BODY_M as CENTERS_M, PALM_CENTER_OFFSETS_BODY_M,
+)
 
 
 def test_pose_only_ballistic_estimate_and_stale_rejection():
@@ -151,6 +151,52 @@ def test_retreat_keeps_squeeze_and_initial_contact_window_for_a_skew_throw():
     assert np.linalg.norm(rate) < np.linalg.norm(plan.retreat_velocity)
     np.testing.assert_allclose(plan.target(plan.contact_time+plan.stop_time)[0], plan.stop_positions)
     np.testing.assert_allclose(plan.target(plan.contact_time+plan.stop_time)[2], 0., atol=1e-12)
+
+
+def test_offset_catch_cushions_along_impact_then_recentres_to_a_safe_carry_pose():
+    settings = CatchSettings()
+    palms = np.array(((0.23, -0.73, settings.center_z), (-0.23, -0.73, settings.center_z)))
+    rotations = (Rotation.from_euler("z", -90, degrees=True),) * 2
+    normals = np.array(((0, -1, 0), (0, 1, 0)))
+    contact_time = 0.35
+    box_z = settings.center_z - 2.97365*contact_time + 4.905*contact_time**2
+    plan = plan_catch(np.array((.15 - .5*contact_time, settings.plane_y - contact_time, box_z)),
+                      np.array((.5, 1.0, 2.97365)), Rotation.identity(), np.zeros(3),
+                      palms, rotations, normals, settings)
+    contact_center = plan.contact_positions.mean(axis=0)
+    assert abs(contact_center[0]) > settings.settle_center_x
+    # The cushion opens at the commanded contact velocity; the lateral axes are
+    # at rest when the settle starts, and the vertical glide ends at its own duration.
+    travel, rate = plan.retreat(0.)
+    np.testing.assert_allclose(travel, 0., atol=1e-12)
+    np.testing.assert_allclose(rate, plan.retreat_velocity, atol=1e-12)
+    travel, rate = plan.retreat(plan.settle_start)
+    np.testing.assert_allclose(rate[:2], 0., atol=1e-12)
+    np.testing.assert_allclose(travel[:2], plan.cushion_displacement[:2], atol=1e-12)
+    travel, rate = plan.retreat(plan.stop_time)
+    np.testing.assert_allclose(rate, 0., atol=1e-12)
+    np.testing.assert_allclose(travel, plan.cushion_displacement + plan.settle_displacement, atol=1e-12)
+    # The settle phase pulls an offset catch back toward the body midline.
+    assert plan.settle_displacement[0] < 0.
+    stop_center = plan.stop_positions.mean(axis=0)
+    assert abs(stop_center[0]) <= settings.settle_center_x + 1e-9
+    assert stop_center[1] <= settings.max_retreat_center_y + 1e-9
+    assert stop_center[1] - contact_center[1] <= settings.max_retreat_depth + 1e-9
+    assert stop_center[2] >= settings.min_retreat_center_z - 1e-9
+    np.testing.assert_allclose(plan.target(plan.contact_time+plan.stop_time)[2], 0., atol=1e-12)
+    # Throughout the retreat the common center never sweeps further out than the
+    # per-axis cushion bounds, so the palms cannot cross the chest keep-out.
+    samples = np.linspace(0., plan.stop_time, 201)
+    centers = contact_center + np.stack([plan.retreat(float(t))[0] for t in samples])
+    assert centers[:, 0].max() <= contact_center[0] + settings.max_retreat_lateral + 1e-9
+    assert centers[:, 1].max() <= contact_center[1] + settings.max_retreat_depth + 1e-9
+    assert centers[:, 2].min() >= settings.min_retreat_center_z - 1e-9
+    for boundary in (plan.contact_time, plan.contact_time+plan.settle_start,
+                     plan.contact_time+plan.stop_time):
+        before, _, before_speed, _ = plan.target(boundary-1e-7)
+        after, _, after_speed, _ = plan.target(boundary+1e-7)
+        np.testing.assert_allclose(before, after, atol=2e-6)
+        np.testing.assert_allclose(before_speed, after_speed, atol=2e-4)
 
 
 def test_geometry_search_tracks_lateral_box_motion_and_matches_executed_targets():

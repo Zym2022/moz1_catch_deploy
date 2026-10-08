@@ -9,10 +9,10 @@
 | 部署文件 | 源文件 | 源状态 | 改动 |
 | --- | --- | --- | --- |
 | `src/moz1_catch/core/prediction.py` | `MozBoxer/catching/prediction.py` | commit `f603888`（2026-09-29 提交；含 200/160 ms 窗口与竖直经验修正） | 无（逐字拷贝，已 diff 核验一致） |
-| `src/moz1_catch/core/one_shot.py` | `MozBoxer/catching/one_shot.py` | 同上 | 两处 import 改为 `moz1_catch.core.*`；`CATCH_BOX_DIMENSIONS_M` → `BOX_DIMENSIONS_M` |
+| `src/moz1_catch/core/one_shot.py` | `MozBoxer/catching/one_shot.py` | commit `3a2b5c0`（2026-10-08 提交；两段式轴不对称退让 + 接触速度连续修复，见下） | 两处 import 改为 `moz1_catch.core.*`；`CATCH_BOX_DIMENSIONS_M` → `BOX_DIMENSIONS_M` |
 | `src/moz1_catch/core/geometry.py` | `tasks/direct/mozboxer/motions/dataset_schema.py` 的 `PALM_CENTER_OFFSETS_BODY_M`、`PALM_NORMAL_AXES_BODY`；`tasks/direct/mozboxer/palm_coating.py` 的 `CENTERS_M`、`RADIUS_M`、`CORE_CENTERS_M`、`CORE_SIZE_M`；`catching/box_asset.py` 的尺寸/质量 | 同上 | 抽取为独立常数模块；2026-10-01 补充刚芯常数供离线回放，未修改规划行为 |
 | `test/test_prediction.py` | `test/test_catching_prediction.py` | 同上 | 仅 import 改写 |
-| `test/test_one_shot.py` | `test_catching_one_shot.py` | 同上 | 仅 import 改写 |
+| `test/test_one_shot.py` | `test_catching_one_shot.py` | 同 `3a2b5c0` | 仅 import 改写（含新增的偏侧回中/keep-out/连续性契约测试） |
 | `src/moz1_catch/mocap/replay_source.py` 的加载/分段规则 | `scripts/analyze_moz1_box_mocap.py` 的 `load_csv`、`flight_interval`；`scripts/validate_moz1_box_prediction.py` 的 `observations` 降采样与重定心 | 同上 | 移植为类；savolg 参数与规则不变 |
 
 - `7231c7d`（2026-09-28，掌几何标定与动捕适配）：URDF 逐字一致、`one_shot.py`
@@ -21,8 +21,19 @@
   逐字版本（窗口 200/160 ms + `vertical_forecast_gain_per_m`）；`one_shot.py` 在该
   提交中未变。36 条 CSV 全量同步至 `data/box_flying_csv/`；分析系先验与 k 更新为
   34 条重标定值（见 `mocap_prediction_vertical_refinement_2026-09-29.md`）。
+- `3a2b5c0`（2026-10-08，退让改收势）：`one_shot.py` 同步为该提交版本（仅两行
+  import + 常量名差异，已 diff 核验）。行为变化：X/Y 短缓冲（`cushion_distance`
+  0.08 m，原 `retreat_distance` 0.20 m 全向行程取消）+ Z 保留 0.20 m 支撑滑行
+  （`cushion_distance_z`）+ 仅横向收势到 |x| ≤ `settle_center_x`=0.12 m；删除
+  `retreat_velocity` 的面法向投影（接触瞬间参考速度阶跃修复）；Z 下限
+  `min_retreat_center_z`=0.75 m 仅防离谱下坠。`catch.toml` 覆盖示例与 runtime 日志
+  字段（`settle_displacement_m`、`settle_start_s`）同步更新。1024 例配对仿真：
+  成功率与基线无差异（core 507:507 零翻转，wide 255:256 p=1.0），强偏置终态
+  |x| P95 0.233→0.120 m、越中线 81→0 例；详见 MozBoxer 侧
+  `one_shot_retreat_recenter_results_2026-10-08.md`。**实机参数如需回退旧行为，
+  不能再用 `retreat_distance` 覆盖（已更名），旧行为无逐字段等价组合。**
 
-- [x] MozBoxer 源提交已回填：`7231c7d`、`f603888`（最新同步点）
+- [x] MozBoxer 源提交已回填：`7231c7d`、`f603888`、`3a2b5c0`（最新同步点）
 
 ## 数据出处
 

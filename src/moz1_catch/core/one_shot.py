@@ -41,7 +41,15 @@ class CatchSettings:
     normal_lead: float = 0.040
     tangent_lead: float = 0.055
     grip_compression: float = 0.010
-    retreat_distance: float = 0.30
+    # Two-phase retreat: a short lateral/depth cushion plus a long vertical glide
+    # that keeps supporting the box, then a lateral-only settle to a carry pose.
+    cushion_distance: float = 0.08
+    cushion_distance_z: float = 0.20
+    settle_duration: float = 0.30
+    settle_center_x: float = 0.12
+    settle_depth: float = 0.0
+    settle_drop: float = 0.0
+    min_retreat_center_z: float = 0.85
     max_retreat_lateral: float = 0.08
     max_retreat_depth: float = 0.14
     max_retreat_center_x: float = 0.24
@@ -56,8 +64,9 @@ class CatchSettings:
 LATE_COMMIT_SETTINGS = CatchSettings(
     plane_y=-0.58, max_height_error=0.28,
     max_palm_speed=3.0, max_palm_acceleration=48.0,
-    close_duration=0.08, retreat_distance=0.20,
+    close_duration=0.08,
     max_retreat_depth=0.10, max_retreat_center_y=-0.45,
+    min_retreat_center_z=0.75,
 )
 
 
@@ -100,6 +109,9 @@ class CatchPlan:
     start_gaps: np.ndarray
     retreat_velocity: np.ndarray
     retreat_durations: np.ndarray
+    cushion_displacement: np.ndarray
+    settle_displacement: np.ndarray
+    settle_start: float
     geometry_score: float = 0.0
     execution_delay_s: float = 0.0
     geometry_mode: str = "fixed"
@@ -107,11 +119,15 @@ class CatchPlan:
     predicted_touch_normal_cosines: tuple[float, float] = (float("nan"), float("nan"))
 
     def retreat(self, elapsed: np.ndarray | float) -> tuple[np.ndarray, np.ndarray]:
-        """Common translation with continuous velocity/acceleration and no follow plateau."""
-        s = np.clip(np.asarray(elapsed)[..., None] / self.retreat_durations, 0., 1.)
+        """Cushion along the impact direction, then settle from rest to a safe carry pose."""
+        elapsed = np.asarray(elapsed)
+        s = np.clip(elapsed[..., None] / self.retreat_durations, 0., 1.)
         travel = self.retreat_velocity * self.retreat_durations * (s - s**3 + .5*s**4)
         velocity = self.retreat_velocity * (1. - 3*s**2 + 2*s**3)
-        return travel, velocity
+        u = np.clip((elapsed[..., None] - self.settle_start) / self.settings.settle_duration, 0., 1.)
+        blend = 10*u**3 - 15*u**4 + 6*u**5
+        rate = (30*u**2 - 60*u**3 + 30*u**4) / self.settings.settle_duration
+        return travel + self.settle_displacement*blend, velocity + self.settle_displacement*rate
 
     def target(self, time_s: float) -> tuple[np.ndarray, tuple[Rotation, Rotation], np.ndarray, np.ndarray]:
         """Return palm targets at time relative to the scheduled execution start."""
@@ -214,10 +230,13 @@ def _build_plan(
                          cfg.tangent_speed_cap,
                          cfg.normal_speed, cfg.precontact_gap, cfg.close_duration,
                          cfg.normal_lead, cfg.tangent_lead, cfg.grip_compression,
-                         cfg.retreat_distance, cfg.max_retreat_lateral, cfg.max_retreat_depth,
+                         cfg.cushion_distance, cfg.cushion_distance_z, cfg.settle_duration,
+                         cfg.max_retreat_lateral, cfg.max_retreat_depth,
                          cfg.max_retreat_center_x, cfg.common_motion_relax_duration, cfg.palm_sphere_radius)
     if (box_velocity[1] <= 0 or not np.isfinite(cfg.plane_y) or not np.isfinite(cfg.center_z)
-            or not np.isfinite(cfg.max_retreat_center_y)
+            or not np.isfinite(cfg.max_retreat_center_y) or not np.isfinite(cfg.min_retreat_center_z)
+            or any(not np.isfinite(value) or value < 0
+                   for value in (cfg.settle_center_x, cfg.settle_depth, cfg.settle_drop))
             or box_half_extents.shape != (3,) or not np.isfinite(box_half_extents).all()
             or np.any(box_half_extents <= 0)
             or any(not np.isfinite(value) or value <= 0 for value in positive_settings)
@@ -280,25 +299,46 @@ def _build_plan(
     biased_side = 1 if contact_box_position[0] > 0 else 0
     contacts[biased_side] += (cfg.lateral_contact_bias_gain * abs(contact_box_position[0])
                               * normals[biased_side])
-    # The normal projection below changes common motion as well as closing.
-    # Start braking from the velocity actually commanded at contact.
-    retreat_velocity = follow_velocity + np.dot(lateral_velocity-follow_velocity, normals[0])*normals[0]
-    displacement = cfg.retreat_distance / np.linalg.norm(follow_velocity) * retreat_velocity
+    # Start braking exactly from the velocity commanded at contact: the normal
+    # gap projection in target() cancels any common face-normal component of
+    # the retreat anyway, and opening at the approach velocity keeps velocity
+    # continuous through the contact instant.
+    retreat_velocity = follow_velocity
     center = contacts.mean(axis=0)
+    # Phase 1 brakes the lateral and chestward axes over a short, hard-clamped
+    # cushion, while the vertical axis keeps a long baseline-like glide that
+    # keeps supporting the box while the squeeze builds.
+    budgets = np.array((cfg.cushion_distance, cfg.cushion_distance, cfg.cushion_distance_z))
+    cushion = budgets / np.linalg.norm(follow_velocity) * retreat_velocity
     lateral_space = cfg.max_retreat_center_x - np.sign(retreat_velocity[0])*center[0]
-    displacement[0] = np.sign(displacement[0])*min(abs(displacement[0]), cfg.max_retreat_lateral,
-                                                   max(0., lateral_space))
+    cushion[0] = np.sign(cushion[0])*min(abs(cushion[0]), cfg.max_retreat_lateral,
+                                         max(0., lateral_space))
     if retreat_velocity[1] > 0:
-        displacement[1] = min(displacement[1], cfg.max_retreat_depth,
-                              max(0., cfg.max_retreat_center_y-center[1]))
+        cushion[1] = min(cushion[1], cfg.max_retreat_depth,
+                         max(0., cfg.max_retreat_center_y-center[1]))
+    cushion[2] = max(cushion[2], cfg.min_retreat_center_z-center[2])
     moving = np.abs(retreat_velocity) > 1e-9
-    if np.any(moving & (np.abs(displacement) < 1e-9)):
+    if np.any(moving & (np.abs(cushion) < 1e-9)):
         raise ValueError("no common retreat space at the contact pose")
     retreat_durations = np.ones(3)
-    retreat_durations[moving] = 2*displacement[moving]/retreat_velocity[moving]
+    retreat_durations[moving] = 2*cushion[moving]/retreat_velocity[moving]
     if np.linalg.norm(1.5*retreat_velocity/retreat_durations) > cfg.max_palm_acceleration:
         raise ValueError("not enough common retreat space to stop the palms")
-    stop_time = max(float(retreat_durations[moving].max()) if moving.any() else 0.,
+    # Phase 2: from lateral rest, recentre the held box toward the body midline.
+    # The X pull is a normal push between the palms, so it does not shear a
+    # marginal grip the way an in-plane settle would.
+    cushioned = center + cushion
+    settle_target = np.array((np.sign(cushioned[0])*min(abs(cushioned[0]), cfg.settle_center_x),
+                              min(cushioned[1]+cfg.settle_depth, cfg.max_retreat_center_y,
+                                  center[1]+cfg.max_retreat_depth),
+                              max(cushioned[2]-cfg.settle_drop, cfg.min_retreat_center_z)))
+    settle = settle_target - cushioned
+    horizontal = moving[:2]
+    settle_start = float(retreat_durations[:2][horizontal].max()) if horizontal.any() else 0.
+    if np.linalg.norm(np.abs(settle)*(10/np.sqrt(3))/cfg.settle_duration**2) > cfg.max_palm_acceleration:
+        raise ValueError("settle motion exceeds the palm acceleration budget")
+    stop_time = max(settle_start + cfg.settle_duration,
+                    float(retreat_durations[moving].max()) if moving.any() else 0.,
                     2*cfg.grip_compression/cfg.normal_speed-cfg.normal_lead)
     precontact = contacts - cfg.tangent_lead * follow_velocity
     early_coefficients = _quintic(palm_positions, precontact, np.tile(follow_velocity, (2, 1)), tangent_start)
@@ -318,9 +358,9 @@ def _build_plan(
         vectors.append((target_rotation * palm_rotations[side].inv()).as_rotvec())
     plan = CatchPlan(contact_time, contacts, normals, tuple(rotations), palm_rotations,
                      follow_velocity, lateral_velocity, relative_speed,
-                     contacts + displacement - cfg.grip_compression * normals,
+                     contacts + cushion + settle - cfg.grip_compression * normals,
                      stop_time, cfg, early_coefficients, np.asarray(vectors), start_gaps,
-                     retreat_velocity, retreat_durations)
+                     retreat_velocity, retreat_durations, cushion, settle, settle_start)
     if check_speed:
         _check_plan_speed(plan)
     return plan
