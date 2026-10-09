@@ -11,10 +11,11 @@
 #   T_MD  : box rigid body D as reported by mocap (global frame M)
 #   T_FM  : mocap global -> torso_flange  (hand-eye, calibrated 2026-09-28)
 #   T_DG  : ^D T_G, box geometry G expressed in rigid body D
-#           (TEST recalibration 2026-09-30, supersedes the 2026-09-27 manual one)
+#           (translation fix 2026-10-10; rotation from the 2026-09-30 test
+#            recalibration, superseding the 2026-09-27 manual one)
 
 [frames]
-version = "handeye-2026-09-28+dgtest-2026-09-30"
+version = "handeye-2026-09-28+dgfix-2026-10-10"
 
 [frames.mocap]
 position_units = "meters"        # "meters" | "millimeters"
@@ -62,29 +63,38 @@ matrix = [
 ]
 
 [frames.extrinsics.T_DG]
-# TEST recalibration 2026-09-30 (empirical, rotation only), deployed while the
-# rigid-body-to-box axes are under investigation.  Derived from the live
-# opti_json stream so that the box AS PLACED at capture time (dominant static
-# solution: 1557/1599 frames, 8/8 markers, pos std 0.31 mm, euler YXZ
-# yaw 33.08 / pitch 0.37 / roll 1.37 deg) reads exactly
-#     x_G -> +Z_mocap,  y_G -> +X_mocap,  z_G -> +Y_mocap (vertical)
-# via  R_DG = R_MD_measured^T @ [[0,1,0],[0,0,1],[1,0,0]].
-# Today's physical placement therefore defines the zero-yaw reference (the
-# ~33 deg room yaw is absorbed into this matrix).  TRANSLATION is UNCHANGED
-# from 2026-09-27: no re-measure of the box-centre offset was taken, and if
-# the old rotation really was wrong the 4.85 cm offset direction is suspect
-# too - re-measure before trusting G's origin absolutely.
+# Translation fix 2026-10-10, from a two-placement export-vs-UDP comparison
+# (data/test.csv and data/test1.csv, box static; 200 Hz opti_json captured on
+# the same placements).  Findings, all measured not assumed:
+#   * the mocap CSV export and the UDP stream report the SAME rigid-body
+#     position (0.05 mm) but DIFFERENT orientations, by one constant
+#     convention rotation R_fix = ^Dcsv R_Dudp, 101.879 deg
+#     (euler xyz -4.645/-56.292/-86.216); residual 0.015 deg between two
+#     placements 28 deg apart - a fixed software convention, not solver noise;
+#   * the 2026-09-30 recalibration rotated R_DG to compensate that offset but
+#     kept the 2026-09-27 translation numbers UNROTATED, so the deployed box
+#     centre carried a constant-magnitude 67.5 mm error whose direction
+#     rotates with the box attitude (= |R_MD (R_fix - I) t_DG|);
+#   * the corrected constant below rotates the trusted 2026-09-27 CSV-path
+#     offset into the UDP convention: t_DG = R_fix^T @ (R_GD^T-rotated 09-27
+#     offset).  UDP + this matrix reproduces the CSV-path (09-27 constants)
+#     box pose to 0.05 mm / 0.014 deg on both validation placements.
+# Cross-check on attempt_20261009_115808_accept: with this matrix the settled
+# box centre sits 2.5 mm (X) / 3.3 mm (Y) off the palm-pair midpoint and both
+# palm plates clear the faces by 16.5 / 20.6 mm - the symmetric impedance
+# hold the drawn (biased) picture hid.
 # NOTE: mocap/replay_source.py keeps its own hardcoded copy of the 09-27
 # constants so the offline-study replay regression stays bit-identical; only
-# the live UDP path uses this matrix.
-# Rollback = restore the 09-27 matrix (source: ^G T_D =
-#   [[0, 1, 0, -0.0003], [0, 0, 1, 0], [1, 0, 0, 0.0485375], [0, 0, 0, 1]],
-#   MozBoxer catching/docs/mocap_box_geometry_calibration_2026-09-27.md):
-#   [[0.0, 0.0, 1.0, -0.0485375], [1.0, 0.0, 0.0, 0.0003],
-#    [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+# the live UDP path uses this matrix.  Traces recorded with the 09-30 matrix
+# are migrated offline by scripts/replay_real_robot.py --migrate-box-tdg.
+# Rollback = restore the 09-30 matrix:
+#   [[-0.54549017749, 0.837776770388, 0.0238861729722, -0.0485375],
+#    [0.0183764321636, -0.0165374712139, 0.999694362686, 0.0003],
+#    [0.837915731445, 0.545762397975, -0.00637431988159, 0.0],
+#    [0.0, 0.0, 0.0, 1.0]]
 matrix = [
-    [-0.54549017749, 0.837776770388, 0.0238861729722, -0.0485375],
-    [0.0183764321636, -0.0165374712139, 0.999694362686, 0.0003],
-    [0.837915731445, 0.545762397975, -0.00637431988159, 0.0],
+    [-0.554009713454, 0.831707441329, 0.036550915666, -0.001940292983],
+    [-0.001368512552, -0.044814230908, 0.998994400325, -0.04848910126],
+    [0.832509077771, 0.55340258108, 0.025965721297, -0.001010558474],
     [0.0, 0.0, 0.0, 1.0],
 ]

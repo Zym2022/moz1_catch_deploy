@@ -25,6 +25,26 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOGS = ROOT / 'output'
 DEFAULT_MESHES = ROOT / 'data/meshes'
 
+# Box poses in every trace recorded before the 2026-10-10 T_DG translation
+# fix carry this constant baked in (see config/frames.toml rollback entry).
+LEGACY_T_DG_2026_09_30 = np.array([
+    [-0.54549017749, 0.837776770388, 0.0238861729722, -0.0485375],
+    [0.0183764321636, -0.0165374712139, 0.999694362686, 0.0003],
+    [0.837915731445, 0.545762397975, -0.00637431988159, 0.0],
+    [0.0, 0.0, 0.0, 1.0]])
+# Every trace field episode() reads; object-dtype fields are excluded on
+# purpose so migration never needs allow_pickle.
+TRACE_KEYS = (
+    'observation_time_s', 'observation_position_m', 'observation_quat_xyzw',
+    'observation_valid', 'observation_box_pose', 'command_t_host_s',
+    'command_t_plan_s', 'command_phase', 'target_palm_position',
+    'target_palm_rotation_xyzw', 'feedback_t_s', 'feedback_joint_left_rad',
+    'feedback_joint_right_rad', 'feedback_palm_position',
+    'feedback_palm_rotation_xyzw', 'contact_time_s', 'predicted_touch_times_s',
+    'contact_normals', 'estimated_box_position_m', 'estimated_box_velocity_mps',
+    'estimated_box_rotation_xyzw', 'estimated_box_angular_velocity_radps',
+    'estimated_box_acceleration_mps2')
+
 
 def numbers(value):
     """Six decimal places: sub-micrometre position, <0.001 degree angle precision."""
@@ -120,6 +140,58 @@ def check_hand_model(model):
         assert abs(front - np.dot(PALM_CENTER_OFFSETS_BODY_M[side], normal)) < 1e-9
 
 
+def read_configured_tdg() -> np.ndarray:
+    try:
+        import tomllib
+    except ImportError:  # Python 3.10 deployment venv
+        import tomli as tomllib
+    with open(ROOT / 'config' / 'frames.toml', 'rb') as stream:
+        table = tomllib.load(stream)['frames']['extrinsics']['T_DG']['matrix']
+    return np.asarray(table, dtype=float)
+
+
+def migrate_box_tdg(trace) -> dict:
+    """Lift a pre-2026-10-10 trace onto the currently configured T_DG, in memory.
+
+    Recorded box poses have the legacy 2026-09-30 constant baked in
+    (T_BG = T_eff @ T_MD @ legacy), and the effective extrinsic cancels in the
+    swap, so the migration is one fixed box-frame right factor
+    C = inv(legacy) @ current:  positions shift by R_old @ C_t, orientations
+    right-multiply by C_R (2.06 deg).  The frozen-flight commit state gets the
+    same pose fix plus v += w x (R @ C_t) (angular velocity is exact under a
+    right factor).  Contact normals (<= 2 deg) and touch times are kept as
+    recorded; acceleration keeps its gravity-dominant value, leaving ~cm-level
+    drift in the extrapolated prediction beyond contact.  Raw trace files on
+    disk are never touched.
+    """
+    swap = np.linalg.inv(LEGACY_T_DG_2026_09_30) @ read_configured_tdg()
+    rotation_c, translation_c = Rotation.from_matrix(swap[:3, :3]), swap[:3, 3]
+    data = {key: trace[key] for key in TRACE_KEYS if key in trace.files}
+
+    def pose(position, quaternion):
+        rotation = Rotation.from_quat(quaternion)
+        shifted = rotation.as_matrix() @ translation_c
+        return (position + shifted if position.ndim == 1 else
+                position + np.einsum('nij,j->ni', rotation.as_matrix(), translation_c),
+                (rotation * rotation_c).as_quat())
+
+    data['observation_position_m'], data['observation_quat_xyzw'] = pose(
+        data['observation_position_m'], data['observation_quat_xyzw'])
+    if 'observation_box_pose' in data:
+        box_pose = data['observation_box_pose'].copy()
+        box_pose[:3] += Rotation.from_quat(box_pose[3:]).as_matrix() @ translation_c
+        box_pose[3:] = (Rotation.from_quat(box_pose[3:]) * rotation_c).as_quat()
+        data['observation_box_pose'] = box_pose
+    if 'estimated_box_position_m' in data:
+        position, quaternion = pose(data['estimated_box_position_m'],
+                                    data['estimated_box_rotation_xyzw'])
+        data['estimated_box_position_m'], data['estimated_box_rotation_xyzw'] = position, quaternion
+        omega = data['estimated_box_angular_velocity_radps']
+        data['estimated_box_velocity_mps'] = (data['estimated_box_velocity_mps']
+            + np.cross(omega, Rotation.from_quat(quaternion).as_matrix() @ translation_c))
+    return data
+
+
 def series(trace, time_key, fields, origin):
     times = trace[time_key]
     order = np.unique(times, return_index=True)[1]
@@ -134,11 +206,13 @@ def series(trace, time_key, fields, origin):
     return result
 
 
-def episode(path, urdf, check=False):
+def episode(path, urdf, check=False, migrate=False):
     meta = json.loads((path / 'meta.json').read_text())
     if hashlib.sha256(urdf.read_bytes()).hexdigest() != meta['posture']['urdf_sha256']:
         raise ValueError(f'{path.name}: URDF checksum differs from the recorded robot')
     with np.load(path / 'trace.npz', allow_pickle=False) as trace:
+        if migrate:
+            trace = migrate_box_tdg(trace)
         obs_times = trace['observation_time_s']
         if 'observation_box_pose' in trace:
             error = np.linalg.norm(trace['observation_position_m'] - trace['observation_box_pose'][:3], axis=1)
@@ -201,6 +275,10 @@ def main():
     parser.add_argument('--meshes', type=Path, default=DEFAULT_MESHES)
     parser.add_argument('--output', type=Path, default=ROOT / 'output/real_robot_replay/index.html')
     parser.add_argument('--self-check', action='store_true', help='Verify every feedback sample against URDF FK')
+    parser.add_argument('--migrate-box-tdg', action='store_true',
+                        help='Re-derive recorded box poses from the legacy 2026-09-30 T_DG '
+                             'onto the current config/frames.toml one (traces recorded before '
+                             'the 2026-10-10 translation fix); raw trace files are not modified')
     args = parser.parse_args()
     logs, urdf = args.logs.expanduser(), args.urdf.expanduser()
     paths = [logs] if (logs / 'trace.npz').is_file() else sorted(logs.glob('attempt_*/'))
@@ -209,7 +287,8 @@ def main():
     payload = dict(robot=robot_model(urdf, args.meshes.expanduser()),
                    palm_offsets=numbers(PALM_CENTER_OFFSETS_BODY_M),
                    palm_normals=numbers(PALM_NORMAL_AXES_BODY),
-                   episodes=[episode(path, urdf, args.self_check) for path in paths])
+                   episodes=[episode(path, urdf, args.self_check, args.migrate_box_tdg)
+                             for path in paths])
     if args.self_check:
         check_hand_model(payload['robot'])
     encoded = packed(json.dumps(payload, ensure_ascii=False, separators=(',', ':'),

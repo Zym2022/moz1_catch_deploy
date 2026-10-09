@@ -24,6 +24,19 @@
 导出时检查日志 URDF 哈希；`--self-check` 逐帧核对反馈关节 FK 与日志掌位姿。
 页面加载时也会检查浏览器 FK 的位置与四元数，避免两端坐标实现不一致。
 
+### 迁移 2026-10-10 之前的旧试次
+
+2026-10-10 修正了 `frames.toml` 中 T_DG 的平移（09-30 版只旋转了姿态、平移未随约定旋转，
+箱心恒定偏 67.5 mm）。此前录制的试次在导出时加 `--migrate-box-tdg`，可把日志中的箱体位姿
+在线换算到当前 T_DG（观测、提交观测与冻结预测初态；原始 `trace.npz` 文件不被改动）：
+
+```bash
+.venv/bin/python scripts/replay_real_robot.py output/attempt_20261009_115808_accept \
+  --output output/real_robot_replay/index.html --self-check --migrate-box-tdg
+```
+
+新录制的试次（修正后配置）不要再加该参数；加了也是无操作（两常数相同）。
+
 ## 开发机与机器人主机通过 GitHub 同步
 
 两台机器使用同一个部署仓库。Git 同步回放脚本、HTML 模板、渲染库、URDF、
